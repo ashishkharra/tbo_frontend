@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+/* app/globals.css - Add these styles at the end */
+
+/* .handsontable {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.handsontable .wtHider {
+  height: 100% !important;
+}
+
+.handsontable .wtSpacer {
+  height: 100% !important;
+}
+
+.wtHolder {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.ht_master .wtHolder {
+  height: 100% !important;
+  width: 100% !important;
+} */
+ 
+.compact-input {
+  @apply w-full px-3 py-1.5 text-sm 
+         bg-gray-50 
+         border border-gray-300 
+         rounded-md 
+         focus:outline-none 
+         focus:ring-2 
+         focus:ring-blue-500 
+         focus:border-blue-500 
+         transition;
+}
+
+/* Center all cells */
+.custom-hot .htCore td {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+/* Header styling */
+.custom-hot .htCore th {
+  text-align: center !important;
+  vertical-align: middle !important;
+  font-weight: bold !important;
+  color: black !important;
+  text-transform: uppercase !important;
+}
+
+/* Add to your global CSS */
+.handsontable td {
+  padding: 2px -5px !important;
+}
+
+.handsontable th {
+  font-weight: bold !important;
+  padding: 2px -5px !important;
+}
+
+/* Target row headers (serial numbers) with high specificity */
+
+.dark .handsontable th {
+  background-color: #111827;
+  color: #e5e7eb;
+}
+
+.dark .handsontable td {
+  background-color: #0f172a;
+  color: #e5e7eb;
+}
+
+.dark .handsontable .htCore {
+  background-color: #0f172a;
+}
+
+.dark .handsontable .current {
+  background-color: #1f2937 !important;
+}
