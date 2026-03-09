@@ -2871,6 +2871,8 @@ export default function TBOUsersPage() {
                   Team
                 </button>
               )}
+
+              <a href="/tbo-users/setting" className="px-2 py-1 text-xs font-medium text-white bg-gray-700 hover:bg-gray-800 rounded whitespace-nowrap shadow-sm">Setting</a>
           </div>
         );
       },
@@ -3140,19 +3142,19 @@ export default function TBOUsersPage() {
     );
   }
 
-  if (loading && users.length === 0) {
-    return (
-      <div className="min-h-screen bg-gray-50 overflow-x-hidden">
-        <TBOUserNavbar />
-        <div className="bg-white rounded-lg shadow-lg p-8 mx-0 mt-0">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <div className="text-gray-700">Loading TBO Users...</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // if (loading && users.length === 0) {
+  //   return (
+  //     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
+  //       <TBOUserNavbar />
+  //       <div className="bg-white rounded-lg shadow-lg p-8 mx-0 mt-0">
+  //         <div className="text-center">
+  //           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+  //           <div className="text-gray-700">Loading TBO Users...</div>
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">

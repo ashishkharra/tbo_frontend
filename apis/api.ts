@@ -1,7 +1,7 @@
 import axios from 'axios';
-const BASE_URL = 'http://localhost:3500/api';
+//const BASE_URL = 'http://localhost:3500/api';
 //const BASE_URL = 'http://localhost:3500/api'
-//const BASE_URL = 'http://192.168.29.176:3500/api';
+const BASE_URL = 'http://192.168.29.176:3500/api';
 export const IMAGE_URL = 'http://localhost:3500';
 //const BASE_URL = 'http://192.168.1.9:3500/api';
 const getAuthHeaders = async () => {

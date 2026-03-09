@@ -568,6 +568,7 @@ export default function DropdownMasterPage() {
                 onChange={(e) => setSelectedDataId(e.target.value)}
                 disabled={isAnyActionLoading}
               >
+                <option value="">Data Id</option>
                 <option value="">All</option>
                 {filterOptions.data_id?.map((id) => (
                   <option key={id} value={id}>{id}</option>
@@ -612,6 +613,7 @@ export default function DropdownMasterPage() {
                   onChange={(e) => setSelectedStatus(e.target.value)}
                   disabled={isAnyActionLoading}
                 >
+                   <option value="">Status</option>
                   <option value="">All</option>
                   {filterOptions.status?.map((status) => (
                     <option key={status} value={status}>
