@@ -46,18 +46,21 @@ interface DataItem {
   updated_at: string;
 }
 interface FilterOptions {
-  status: number[];
-  data_id: number[];
+  data_id?: number[];
+  is_active?: number[];
+  dropdown_name?: string[];
+  reg_name?: string[];
 }
-
 
 interface ApiResponse {
   success: boolean;
   data: {
     result: DataItem[];
     filters: {
-      status: number[];
-      data_id: number[];
+      data_id?: number[];
+      is_active?: number[];
+      dropdown_name?: string[];
+      reg_name?: string[];
     };
     pagination?: {
       currentPage: number;
@@ -75,6 +78,8 @@ export default function DropdownMasterPage() {
     status: [],
     data_id: [],
   });
+
+  console.log('filter option ->>>>>>', filterOptions)
   const [selectedDataId, setSelectedDataId] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedDropdown, setSelectedDropdown] = useState('');
@@ -202,6 +207,9 @@ export default function DropdownMasterPage() {
 
       if (selectedDataId) params.data_id = selectedDataId;
       if (selectedStatus) params.status = selectedStatus;
+      if (dropdownName) params.dropdown_name = dropdownName;   // ✅ ADD HERE
+      if (registerName) params.reg_name = registerName;        // ✅ ADD HERE
+
       if (valueId) params.value_id = valueId;
       if (englishValue) params.search = englishValue;
       if (hindiValue) params.search = hindiValue;
@@ -260,7 +268,12 @@ export default function DropdownMasterPage() {
           setColumns(dynamicColumns);
         }
 
-        setFilterOptions(response.data.filters || { status: [], data_id: [] });
+        setFilterOptions(response.data.filters || {
+          data_id: [],
+          is_active: [],
+          dropdown_name: [],
+          reg_name: []
+        });
 
         if (response.data.pagination) {
           setCurrentPage(response.data.pagination.currentPage);
@@ -302,8 +315,7 @@ export default function DropdownMasterPage() {
       if (selectedDataId) params.data_id = selectedDataId;
       if (selectedStatus) params.status = selectedStatus;
       if (valueId) params.value_id = valueId;
-      if (englishValue) params.search = englishValue;
-      if (hindiValue) params.search = hindiValue;
+      params.search = englishValue || hindiValue;
 
       const response = await dataidImportMasterTable(params) as ApiResponse;
       if (response.success && response.data) {
@@ -568,7 +580,6 @@ export default function DropdownMasterPage() {
                 onChange={(e) => setSelectedDataId(e.target.value)}
                 disabled={isAnyActionLoading}
               >
-                <option value="">Data Id</option>
                 <option value="">All</option>
                 {filterOptions.data_id?.map((id) => (
                   <option key={id} value={id}>{id}</option>
@@ -585,22 +596,24 @@ export default function DropdownMasterPage() {
                   className="w-full text-black mt-1 border border-gray-300 rounded-md px-3 py-2 text-sm"
                 >
                   <option value="">Dropdown Name</option>
-                  <option value="dropdown1">Dropdown 1</option>
-                  <option value="dropdown2">Dropdown 2</option>
+                  {filterOptions.dropdown_name?.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
                 </select>
               </div>
             )}
 
             {isYojnaMaster && (
-              <div className="w-[200px]">
+              <div className="w-[200px] text-black">
                 <select
                   value={registerName}
                   onChange={(e) => setRegisterName(e.target.value)}
                   className="w-full mt-1 border border-gray-300 rounded-md px-3 py-2 text-sm"
                 >
                   <option value="">Register Name</option>
-                  <option value="register1">Register 1</option>
-                  <option value="register2">Register 2</option>
+                  {filterOptions.reg_name?.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
                 </select>
               </div>
             )}
@@ -613,9 +626,8 @@ export default function DropdownMasterPage() {
                   onChange={(e) => setSelectedStatus(e.target.value)}
                   disabled={isAnyActionLoading}
                 >
-                   <option value="">Status</option>
                   <option value="">All</option>
-                  {filterOptions.status?.map((status) => (
+                  {filterOptions.is_active?.map((status) => (
                     <option key={status} value={status}>
                       {status === 1 ? 'Active' : 'Inactive'}
                     </option>
@@ -756,8 +768,8 @@ export default function DropdownMasterPage() {
               colHeaders={columns.map(col => col.title)}
               rowHeaders={true}
               width="100%"
-              height="calc(100vh - 180px)"
-              stretchH="none" // 🔥 Important (prevents full width stretch)
+              height="calc(100vh - 120px)"
+              stretchH="all" // Ensures columns fill the container width
               autoColumnSize={true}
               manualColumnResize={true}
               manualRowResize={true}
@@ -775,7 +787,7 @@ export default function DropdownMasterPage() {
               className="custom-hot"
               licenseKey="non-commercial-and-evaluation"
             />
-            {data.length > 0 && (
+            {/* {data.length > 0 && (
               <div className="bg-white border-t mt-7 px-4 py-1 flex items-center justify-between text-sm text-gray-600">
                 <span>
                   {loading ? "Loading..." : `Page ${currentPage} of ${totalPages} · Showing ${((currentPage - 1) * (itemsPerPage === 'All' ? totalRecords : itemsPerPage)) + 1} to ${Math.min(currentPage * (itemsPerPage === 'All' ? totalRecords : itemsPerPage), totalRecords)} entries of ${totalRecords}`}
@@ -795,7 +807,6 @@ export default function DropdownMasterPage() {
                     <ChevronLeft size={14} />
                   </button>
 
-                  {/* Page numbers */}
                   {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
                     let pageNum;
                     if (totalPages <= 7) {
@@ -882,7 +893,7 @@ export default function DropdownMasterPage() {
                   </select>
                 </div>
               </div>
-            )}
+            )} */}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-[calc(100vh-260px)] text-center">

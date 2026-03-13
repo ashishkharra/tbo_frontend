@@ -64,6 +64,7 @@ import { MODULES } from "../../constants/modules";
 import NewUserFormModal from "./new-user-form-modal";
 import ModuleAssignmentModal from "./module-assignment-modal";
 import { DeleteTboUsers, getTboModules, getTboTeams, getTboUsers, PostTboTeamMembers, PostTboUsers, TboUsersChangePassword, UpdateTboUsers } from "@/apis/api";
+import TBOUsersHotTable from "./TBOUsersHotTable";
 
 const useModulesCodeMap = () => {
   const [map, setMap] = useState<Record<string, string>>({});
@@ -628,7 +629,7 @@ const PermissionCodeCell = ({
             }}
             className="p-0.5 hover:bg-red-100 rounded transition-colors"
             title="Cancel"
-            >
+          >
             <X className="w-3 h-3 text-red-600" />
           </button>
         </>
@@ -767,9 +768,9 @@ const PasswordCell = ({ row, rowIndex, onUpdate }: any) => {
         className="w-full h-full p-1 bg-transparent focus:outline-none placeholder:text-gray-500 text-sm text-gray-800"
         placeholder={
           user.id &&
-          !String(user.id).startsWith("new") &&
-          !String(user.id).startsWith("blank") &&
-          !showPassword
+            !String(user.id).startsWith("new") &&
+            !String(user.id).startsWith("blank") &&
+            !showPassword
             ? "••••••••"
             : "Change (opt)"
         }
@@ -1260,7 +1261,7 @@ const ROLE_PERMISSIONS: Record<AppUserRole, string[]> = {
 
 export default function TBOUsersPage() {
   const { user, hasRole, hasPermission, loading: authLoading } = useAuth();
-  console.log('user ->>>>>>>>> ', typeof(user?.id))
+  console.log('user ->>>>>>>>> ', typeof (user?.id))
   const modulesCodeMap = {}
 
   const [users, setUsers] = useState<TBOUser[]>([]);
@@ -1519,7 +1520,7 @@ export default function TBOUsersPage() {
           }
           setShowHierarchicalAssignModal(true);
         }
-      } catch {}
+      } catch { }
     };
     window.addEventListener("userAction", handleUserAction as any);
     return () =>
@@ -1933,7 +1934,7 @@ export default function TBOUsersPage() {
       totalPages: Math.max(1, Math.ceil(totalFiltered / prev.itemsPerPage)),
       currentPage:
         prev.currentPage >
-        Math.max(1, Math.ceil(totalFiltered / prev.itemsPerPage))
+          Math.max(1, Math.ceil(totalFiltered / prev.itemsPerPage))
           ? 1
           : prev.currentPage,
     }));
@@ -2042,8 +2043,7 @@ export default function TBOUsersPage() {
 
         if (saveResult && saveResult.success) {
           setMessage(
-            `Assignment copied successfully! ${
-              saveResult.count || 0
+            `Assignment copied successfully! ${saveResult.count || 0
             } assignment(s) saved.`
           );
           await fetchUsers();
@@ -2108,8 +2108,8 @@ export default function TBOUsersPage() {
           columnId === "role"
             ? value
             : roleFilter !== "all"
-            ? roleFilter
-            : "user";
+              ? roleFilter
+              : "user";
         const newUser: EditableUser = {
           id: "new",
           username: columnId === "username" ? value : "",
@@ -2292,37 +2292,37 @@ export default function TBOUsersPage() {
       setMessage("Username and email are required");
       return;
     }
-  
+
     if (!user.role) {
       setMessage("Role is required for all users");
       return;
     }
-  
+
     if (user.isNew && !user.password) {
       setMessage("Password is required for new users");
       return;
     }
-  
+
     if (!checkSession()) {
       return;
     }
-  
+
     setLoading(true);
     try {
       if (user.isNew) {
         const permissionsArray = user.permissions || [];
-      
+
         const hasWebAccess = permissionsArray.includes("login:web");
         const hasMobileAccess = permissionsArray.includes("login:mobile");
-      
+
         const webAccess = hasWebAccess || (!hasWebAccess && !hasMobileAccess);
         const mobileAccess = hasMobileAccess;
-      
+
         const loginAccessStr = [
           webAccess ? 'web' : null,
           mobileAccess ? 'mobile' : null
         ].filter(Boolean).join(',');
-  
+
         const payload = {
           username: user.username,
           email: user.email,
@@ -2330,11 +2330,11 @@ export default function TBOUsersPage() {
           password: user.password || '123',
           mobile: user.mobile || '',
           role: user.role,
-          permissions: loginAccessStr 
+          permissions: loginAccessStr
         };
-  
-        
-        
+
+
+
         const res = await PostTboUsers(payload as any);
         if (res.success) {
           setMessage("User created successfully!");
@@ -2497,9 +2497,8 @@ export default function TBOUsersPage() {
 
   const exportUsers = async () => {
     try {
-      const fileName = `tbo-users-${
-        new Date().toISOString().split("T")[0]
-      }.csv`;
+      const fileName = `tbo-users-${new Date().toISOString().split("T")[0]
+        }.csv`;
       const exportId = await exportQueueService.addDataset1Export(
         fileName,
         "csv",
@@ -2814,7 +2813,7 @@ export default function TBOUsersPage() {
 
             {hasPermission("users:update") &&
               Number(user.id) && (
-                  
+
                 <button
                   onClick={async () => {
                     if (!user || !user.id) {
@@ -2872,7 +2871,7 @@ export default function TBOUsersPage() {
                 </button>
               )}
 
-              <a href="/tbo-users/setting" className="px-2 py-1 text-xs font-medium text-white bg-gray-700 hover:bg-gray-800 rounded whitespace-nowrap shadow-sm">Setting</a>
+            <a href="/tbo-users/setting" className="px-2 py-1 text-xs font-medium text-white bg-gray-700 hover:bg-gray-800 rounded whitespace-nowrap shadow-sm">Setting</a>
           </div>
         );
       },
@@ -2891,12 +2890,12 @@ export default function TBOUsersPage() {
             `Generated tokens for ${tokenGenRes.count} existing assignments`
           );
         }
-      } catch (tokenError: any) {}
+      } catch (tokenError: any) { }
 
       const res = await getTboUsers();
       if (res.success && res.data) {
         const usersArray = Array.isArray(res.data) ? res.data : [];
-      
+
         if (usersArray.length === 0) {
           setUsers([]);
           return;
@@ -2943,7 +2942,7 @@ export default function TBOUsersPage() {
                       !hierarchicalDataFromUsersTable ||
                       (typeof hierarchicalDataFromUsersTable === "object" &&
                         Object.keys(hierarchicalDataFromUsersTable).length ===
-                          0)
+                        0)
                     ) {
                       user.hierarchicalDataAssignment = assignmentsRes.data;
                     } else if (hierarchicalDataFromUsersTable) {
@@ -3173,11 +3172,10 @@ export default function TBOUsersPage() {
                         setRoleFilter(e.target.value);
                         setUsernameFilter("all");
                       }}
-                      className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${
-                        roleFilter === "all"
-                          ? "border-gray-300 bg-white text-gray-800"
-                          : "border-blue-500 bg-blue-50 text-blue-800"
-                      }`}
+                      className={`px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${roleFilter === "all"
+                        ? "border-gray-300 bg-white text-gray-800"
+                        : "border-blue-500 bg-blue-50 text-blue-800"
+                        }`}
                     >
                       <option value="all">All Roles</option>
                       {USER_ROLES.map((role) => (
@@ -3323,15 +3321,15 @@ export default function TBOUsersPage() {
                               const permissionsArray = user.permissions || [];
                               const hasWebAccess = permissionsArray.includes("login:web");
                               const hasMobileAccess = permissionsArray.includes("login:mobile");
-                              
+
                               const webAccess = hasWebAccess || (!hasWebAccess && !hasMobileAccess);
                               const mobileAccess = hasMobileAccess;
-                              
+
                               const loginAccessStr = [
                                 webAccess ? 'web' : null,
                                 mobileAccess ? 'mobile' : null
                               ].filter(Boolean).join(',');
-                          
+
                               const payload = {
                                 username: user.username,
                                 email: user.email,
@@ -3341,9 +3339,9 @@ export default function TBOUsersPage() {
                                 role: user.role,
                                 permissions: loginAccessStr // ✅ string format
                               };
-                          
+
                               console.log("Creating user payload:", payload);
-                              
+
                               const res = await PostTboUsers(payload as any);
                               if (res.success) {
                                 savedCount++;
@@ -3442,9 +3440,7 @@ export default function TBOUsersPage() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {loading ? (
-                      <div className="animate-pulse bg-gray-200 h-8 w-24 rounded"></div>
-                    ) : user ? (
+                    {user ? (
                       <div className="flex items-center space-x-3">
                         <button
                           onClick={() => {
@@ -3489,93 +3485,117 @@ export default function TBOUsersPage() {
               <div className="p-0" style={{ margin: 0, padding: 0 }}>
                 <div
                   style={{
-                    height: "calc(100vh - 420px)",
-                    minHeight: "650px",
                     margin: 0,
                     padding: 0,
                   }}
                 >
                   <div
                     style={{
-                      height: "calc(100% - 20px)",
                       marginBottom: "20px",
                     }}
                   >
-                    <AdvancedExcelDataTable
+                    <TBOUsersHotTable
                       data={paginatedUsers}
-                      columns={getColumns().map((col) => ({
-                        id: col.accessorKey || (col as any).id || col.header,
-                        accessorKey: col.accessorKey,
-                        header: col.header,
-                        size: col.size || 150,
-                        readOnly: col.readOnly,
-                        type: col.type as any,
-                        cell: col.cell,
-                      }))}
                       loading={loading}
-                      onUpdateCell={async (rowIndex, columnId, value) => {
-                        await handleUpdateRow(rowIndex, columnId, value);
+                      onUpdateCell={handleUpdateRow}
+                      onManageUser={(usr) => {
+                        setSelectedUser(usr);
+                        setEditedUser({
+                          ...usr,
+                          password: "",
+                          assignedDatasets: usr.assignedDatasets || [],
+                          datasetAccess: usr.datasetAccess || [],
+                          selectedColumns: usr.selectedColumns || {},
+                          assignedModules: usr.assignedModules || [],
+                          assignedSubModules: usr.assignedSubModules || [],
+                          permissions: usr.permissions || [],
+                          team_ids: usr.team_ids || [],
+                        });
+                        setDirtyFields(new Set());
+                        setShowUserDetails(true);
                       }}
-                      enableCopyPaste={true}
-                      enableSorting={true}
-                      enableFiltering={true}
-                      enableColumnResize={true}
-                      enableRowSelection={true}
-                      enableUndoRedo={true}
-                      enableExport={true}
-                      enableImport={true}
-                      onDataChange={(newData) => {
-                        console.log("Data changed:", newData);
+                      onModulesClick={(usr) => {
+                        if (!usr || !usr.id) return;
+                        setSelectedUser(usr);
+                        setEditedUser({
+                          ...usr,
+                          assignedModules: usr.assignedModules || [],
+                          assignedSubModules: usr.assignedSubModules || [],
+                          assignedDatasets: usr.assignedDatasets || [],
+                          assignedNavbarPages: usr.assignedNavbarPages || [],
+                        });
+                        setDirtyFields(new Set());
+                        setShowModuleAssignModal(true);
                       }}
+                      onDataAssignClick={async (usr) => {
+                        if (!usr || !usr.id) return;
+                        try {
+                          const assignmentsResponse = await apiClient.getUserAssignments(usr.id);
+                          if (assignmentsResponse && assignmentsResponse.success) {
+                            setHierarchicalAssignUser({ ...usr, userAssignments: assignmentsResponse.data });
+                          } else {
+                            setHierarchicalAssignUser(usr);
+                          }
+                        } catch {
+                          setHierarchicalAssignUser(usr);
+                        }
+                        setShowHierarchicalAssignModal(true);
+                      }}
+                      onParentClick={(usr) => {
+                        if (!usr || !usr.id) return;
+                        setParentManagementUser(usr);
+                        setShowParentManagementModal(true);
+                      }}
+                      hasPermission={hasPermission}
                     />
                   </div>
 
                   <div className="flex-shrink-0 mt-4">
-  <CommonPagination
-    currentPage={pagination.currentPage}
-    totalPages={pagination.totalPages}
-    totalItems={pagination.totalItems}
-    itemsPerPage={pagination.itemsPerPage}
-    currentPageItemCount={paginatedUsers.length}
-    onPageChange={(page: number) => {
-      setPagination((prev) => ({
-        ...prev,
-        currentPage: page,
-      }));
-    }}
-    onItemsPerPageChange={(itemsPerPage: number | "All") => {
-      // Convert "All" to a large number (e.g., 1000)
-      const numericValue = itemsPerPage === "All" ? 1000 : itemsPerPage;
-      
-      userSelectedItemsPerPageRef.current = numericValue;
-      setPagination((prev) => ({
-        ...prev,
-        itemsPerPage: numericValue, // Always store as number
-        currentPage: 1,
-      }));
-    }}
-    loading={loading}
-    showRefreshButton={true}
-    onRefresh={fetchUsers}
-  />
-</div>
+                    <CommonPagination
+                      currentPage={pagination.currentPage}
+                      totalPages={pagination.totalPages}
+                      totalItems={pagination.totalItems}
+                      itemsPerPage={pagination.itemsPerPage}
+                      currentPageItemCount={paginatedUsers.length}
+                      onPageChange={(page: number) => {
+                        setPagination((prev) => ({
+                          ...prev,
+                          currentPage: page,
+                        }));
+                      }}
+                      onItemsPerPageChange={(itemsPerPage: number | "All") => {
+                        // Convert "All" to a large number (e.g., 1000)
+                        const numericValue = itemsPerPage === "All" ? 1000 : itemsPerPage;
+
+                        userSelectedItemsPerPageRef.current = numericValue;
+                        setPagination((prev) => ({
+                          ...prev,
+                          itemsPerPage: numericValue, // Always store as number
+                          currentPage: 1,
+                        }));
+                      }}
+                      loading={loading}
+                      showRefreshButton={true}
+                      onRefresh={fetchUsers}
+                    />
+                  </div>
                 </div>
 
                 {(hasPermission("users:create") ||
                   hasRole("super_admin") ||
                   hasRole("admin")) && (
-                  <div className="flex items-center">
-                    <button
-                      onClick={() => {
-                        setShowNewUserModal(true);
-                      }}
-                      className="px-3 py-2 bg-blue-700 text-white rounded-md hover:bg-blue-800 text-sm flex items-center gap-2"
-                      title="Create a new user"
-                    >
-                      <Plus className="w-4 h-4" /> Add New User
-                    </button>
-                  </div>
-                )}
+                    <div className="flex items-center">
+                      <button
+                        onClick={() => {
+                          setShowNewUserModal(true);
+                        }}
+                        className="px-3 py-2 bg-blue-700 text-white rounded-md hover:bg-blue-800 text-sm flex items-center gap-2"
+                        title="Create a new user"
+                      >
+                        <Plus className="w-4 h-4" /> Add New User
+                      </button>
+                    </div>
+                  )}
               </div>
             </div>
 
@@ -3923,7 +3943,7 @@ export default function TBOUsersPage() {
                     <div className="bg-gray-50 rounded-lg p-4">
                       {(assignUser.assignedDatasets &&
                         assignUser.assignedDatasets.length > 0) ||
-                      (assignUser as any).assigned_datasets ? (
+                        (assignUser as any).assigned_datasets ? (
                         <div className="flex flex-wrap gap-2">
                           {(
                             assignUser.assignedDatasets ||
@@ -3955,172 +3975,172 @@ export default function TBOUsersPage() {
                   {((assignUser.assignedDatasets &&
                     assignUser.assignedDatasets.length > 0) ||
                     (assignUser as any).assigned_datasets) && (
-                    <div className="space-y-4">
-                      <h4 className="text-lg font-medium text-gray-800">
-                        Assign Specific Data
-                      </h4>
+                      <div className="space-y-4">
+                        <h4 className="text-lg font-medium text-gray-800">
+                          Assign Specific Data
+                        </h4>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Select Dataset
-                        </label>
-                        <select
-                          value={assignForm.selectedDataset}
-                          onChange={(e) =>
-                            setAssignForm({
-                              ...assignForm,
-                              selectedDataset: e.target.value,
-                            })
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
-                        >
-                          <option value="">Choose a dataset...</option>
-                          {(
-                            assignUser.assignedDatasets ||
-                            (assignUser as any).assigned_datasets ||
-                            []
-                          ).map((datasetId: string) => {
-                            const dataset = AVAILABLE_DATASETS.find(
-                              (d) => d.id === datasetId
-                            );
-                            return (
-                              <option key={datasetId} value={datasetId}>
-                                {dataset?.name || datasetId}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
-
-                      {assignForm.selectedDataset && (
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Filter Criteria
+                            Select Dataset
                           </label>
-                          <p className="text-sm text-gray-600 mb-3">
-                            Select columns and values to filter the dataset data
-                          </p>
-                          <div className="space-y-3">
-                            {assignForm.filterCriteria.map((filter, index) => (
-                              <div
-                                key={index}
-                                className="flex gap-2 items-center"
-                              >
-                                <select
-                                  value={filter.field}
-                                  onChange={(e) => {
-                                    const newCriteria = [
-                                      ...assignForm.filterCriteria,
-                                    ];
-                                    newCriteria[index].field = e.target.value;
-                                    setAssignForm({
-                                      ...assignForm,
-                                      filterCriteria: newCriteria,
-                                    });
-                                  }}
-                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
-                                >
-                                  <option value="">Select column...</option>
-                                  {DATASET_COLUMNS[
-                                    assignForm.selectedDataset as keyof typeof DATASET_COLUMNS
-                                  ]?.map((column) => (
-                                    <option key={column} value={column}>
-                                      {column}
-                                    </option>
-                                  ))}
-                                </select>
-                                <span className="text-gray-600">=</span>
-                                <input
-                                  type="text"
-                                  value={filter.value}
-                                  onChange={(e) => {
-                                    const newCriteria = [
-                                      ...assignForm.filterCriteria,
-                                    ];
-                                    newCriteria[index].value = e.target.value;
-                                    setAssignForm({
-                                      ...assignForm,
-                                      filterCriteria: newCriteria,
-                                    });
-                                  }}
-                                  placeholder="Enter value"
-                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
-                                />
-                                <button
-                                  onClick={() => {
-                                    const newCriteria =
-                                      assignForm.filterCriteria.filter(
-                                        (_, i) => i !== index
-                                      );
-                                    setAssignForm({
-                                      ...assignForm,
-                                      filterCriteria: newCriteria,
-                                    });
-                                  }}
-                                  className="px-2 py-2 text-red-600 hover:bg-red-50 rounded"
-                                  title="Remove filter"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </div>
-                            ))}
-                            <button
-                              onClick={() =>
-                                setAssignForm({
-                                  ...assignForm,
-                                  filterCriteria: [
-                                    ...assignForm.filterCriteria,
-                                    { field: "", value: "" },
-                                  ],
-                                })
-                              }
-                              className="text-blue-700 hover:text-blue-900 text-sm flex items-center gap-1"
-                            >
-                              <span className="text-lg">+</span> Add Filter
-                            </button>
-                          </div>
+                          <select
+                            value={assignForm.selectedDataset}
+                            onChange={(e) =>
+                              setAssignForm({
+                                ...assignForm,
+                                selectedDataset: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                          >
+                            <option value="">Choose a dataset...</option>
+                            {(
+                              assignUser.assignedDatasets ||
+                              (assignUser as any).assigned_datasets ||
+                              []
+                            ).map((datasetId: string) => {
+                              const dataset = AVAILABLE_DATASETS.find(
+                                (d) => d.id === datasetId
+                              );
+                              return (
+                                <option key={datasetId} value={datasetId}>
+                                  {dataset?.name || datasetId}
+                                </option>
+                              );
+                            })}
+                          </select>
                         </div>
-                      )}
 
-                      {assignForm.selectedDataset && (
-                        <div className="bg-blue-50 rounded-lg p-4">
-                          <h5 className="font-medium text-blue-900 mb-2">
-                            Assignment Summary
-                          </h5>
-                          <div className="text-sm text-blue-800 space-y-1">
-                            <p>
-                              <strong>Dataset:</strong>{" "}
-                              {
-                                AVAILABLE_DATASETS.find(
-                                  (d) => d.id === assignForm.selectedDataset
-                                )?.name
-                              }
+                        {assignForm.selectedDataset && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Filter Criteria
+                            </label>
+                            <p className="text-sm text-gray-600 mb-3">
+                              Select columns and values to filter the dataset data
                             </p>
-                            {assignForm.filterCriteria.length > 0 && (
-                              <div>
-                                <p>
-                                  <strong>Filters:</strong>{" "}
-                                  {assignForm.filterCriteria.length} criteria
-                                </p>
-                                <div className="mt-1 space-y-1">
-                                  {assignForm.filterCriteria.map(
-                                    (filter, index) => (
-                                      <p
-                                        key={index}
-                                        className="text-xs bg-blue-100 px-2 py-1 rounded text-blue-800"
-                                      >
-                                        {filter.field} = "{filter.value}"
-                                      </p>
-                                    )
-                                  )}
+                            <div className="space-y-3">
+                              {assignForm.filterCriteria.map((filter, index) => (
+                                <div
+                                  key={index}
+                                  className="flex gap-2 items-center"
+                                >
+                                  <select
+                                    value={filter.field}
+                                    onChange={(e) => {
+                                      const newCriteria = [
+                                        ...assignForm.filterCriteria,
+                                      ];
+                                      newCriteria[index].field = e.target.value;
+                                      setAssignForm({
+                                        ...assignForm,
+                                        filterCriteria: newCriteria,
+                                      });
+                                    }}
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                                  >
+                                    <option value="">Select column...</option>
+                                    {DATASET_COLUMNS[
+                                      assignForm.selectedDataset as keyof typeof DATASET_COLUMNS
+                                    ]?.map((column) => (
+                                      <option key={column} value={column}>
+                                        {column}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <span className="text-gray-600">=</span>
+                                  <input
+                                    type="text"
+                                    value={filter.value}
+                                    onChange={(e) => {
+                                      const newCriteria = [
+                                        ...assignForm.filterCriteria,
+                                      ];
+                                      newCriteria[index].value = e.target.value;
+                                      setAssignForm({
+                                        ...assignForm,
+                                        filterCriteria: newCriteria,
+                                      });
+                                    }}
+                                    placeholder="Enter value"
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      const newCriteria =
+                                        assignForm.filterCriteria.filter(
+                                          (_, i) => i !== index
+                                        );
+                                      setAssignForm({
+                                        ...assignForm,
+                                        filterCriteria: newCriteria,
+                                      });
+                                    }}
+                                    className="px-2 py-2 text-red-600 hover:bg-red-50 rounded"
+                                    title="Remove filter"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
                                 </div>
-                              </div>
-                            )}
+                              ))}
+                              <button
+                                onClick={() =>
+                                  setAssignForm({
+                                    ...assignForm,
+                                    filterCriteria: [
+                                      ...assignForm.filterCriteria,
+                                      { field: "", value: "" },
+                                    ],
+                                  })
+                                }
+                                className="text-blue-700 hover:text-blue-900 text-sm flex items-center gap-1"
+                              >
+                                <span className="text-lg">+</span> Add Filter
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                        )}
+
+                        {assignForm.selectedDataset && (
+                          <div className="bg-blue-50 rounded-lg p-4">
+                            <h5 className="font-medium text-blue-900 mb-2">
+                              Assignment Summary
+                            </h5>
+                            <div className="text-sm text-blue-800 space-y-1">
+                              <p>
+                                <strong>Dataset:</strong>{" "}
+                                {
+                                  AVAILABLE_DATASETS.find(
+                                    (d) => d.id === assignForm.selectedDataset
+                                  )?.name
+                                }
+                              </p>
+                              {assignForm.filterCriteria.length > 0 && (
+                                <div>
+                                  <p>
+                                    <strong>Filters:</strong>{" "}
+                                    {assignForm.filterCriteria.length} criteria
+                                  </p>
+                                  <div className="mt-1 space-y-1">
+                                    {assignForm.filterCriteria.map(
+                                      (filter, index) => (
+                                        <p
+                                          key={index}
+                                          className="text-xs bg-blue-100 px-2 py-1 rounded text-blue-800"
+                                        >
+                                          {filter.field} = "{filter.value}"
+                                        </p>
+                                      )
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                 </div>
 
                 <div className="flex justify-end mt-6 space-x-3">
@@ -4133,36 +4153,35 @@ export default function TBOUsersPage() {
                   {((assignUser.assignedDatasets &&
                     assignUser.assignedDatasets.length > 0) ||
                     (assignUser as any).assigned_datasets) && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          const assignmentData = {
-                            datasetId: assignForm.selectedDataset,
-                            filterCriteria: assignForm.filterCriteria,
-                            assignedAt: new Date().toISOString(),
-                          };
+                      <button
+                        onClick={async () => {
+                          try {
+                            const assignmentData = {
+                              datasetId: assignForm.selectedDataset,
+                              filterCriteria: assignForm.filterCriteria,
+                              assignedAt: new Date().toISOString(),
+                            };
 
-                          await UpdateTboUsers(Number(assignUser.id), {
-                            dataAssignment: assignmentData,
-                          });
+                            await UpdateTboUsers(Number(assignUser.id), {
+                              dataAssignment: assignmentData,
+                            });
 
-                          setMessage("Data assignment saved successfully!");
-                          await fetchUsers();
-                          setShowAssignModal(false);
-                        } catch (error) {
-                          setMessage("Failed to save data assignment");
-                        }
-                      }}
-                      disabled={!assignForm.selectedDataset}
-                      className={`px-4 py-2 rounded text-white ${
-                        assignForm.selectedDataset
+                            setMessage("Data assignment saved successfully!");
+                            await fetchUsers();
+                            setShowAssignModal(false);
+                          } catch (error) {
+                            setMessage("Failed to save data assignment");
+                          }
+                        }}
+                        disabled={!assignForm.selectedDataset}
+                        className={`px-4 py-2 rounded text-white ${assignForm.selectedDataset
                           ? "bg-blue-700 hover:bg-blue-800"
                           : "bg-gray-400 cursor-not-allowed"
-                      }`}
-                    >
-                      Assign Data
-                    </button>
-                  )}
+                          }`}
+                      >
+                        Assign Data
+                      </button>
+                    )}
                 </div>
               </div>
             </div>
@@ -4522,8 +4541,8 @@ export default function TBOUsersPage() {
                         ? "Updating..."
                         : "Creating..."
                       : editingTeam
-                      ? "Update Team"
-                      : "Create Team"}
+                        ? "Update Team"
+                        : "Create Team"}
                   </button>
                 </div>
               </div>
@@ -4593,8 +4612,8 @@ export default function TBOUsersPage() {
 
                     {(teamHierarchyData.user_hierarchy &&
                       teamHierarchyData.user_hierarchy.length > 0) ||
-                    (teamHierarchyData.flat_users &&
-                      teamHierarchyData.flat_users.length > 0) ? (
+                      (teamHierarchyData.flat_users &&
+                        teamHierarchyData.flat_users.length > 0) ? (
                       <div>
                         <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
                           <Users className="w-5 h-5" />
@@ -4602,7 +4621,7 @@ export default function TBOUsersPage() {
                           {teamHierarchyData.team?.user_count || 0} users)
                         </h3>
                         {teamHierarchyData.user_hierarchy &&
-                        teamHierarchyData.user_hierarchy.length > 0 ? (
+                          teamHierarchyData.user_hierarchy.length > 0 ? (
                           <div className="space-y-3">
                             {teamHierarchyData.user_hierarchy.map(
                               (rootUser: any) => (

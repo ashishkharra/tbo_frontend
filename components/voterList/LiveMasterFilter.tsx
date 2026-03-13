@@ -102,40 +102,51 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
           setMasterData(response.data);
 
           const allItemsArray: MasterFilterItem[] = [];
-          Object.values(response.data).forEach((items) => {
+          Object.entries(response.data).forEach(([dataId, items]) => {
             if (Array.isArray(items)) {
-              allItemsArray.push(...items);
+              items.forEach(item => {
+                allItemsArray.push({
+                  ...item,
+                  data_id: parseInt(dataId, 10) // Inject the key as data_id
+                });
+              });
             }
           });
           setAllItems(allItemsArray);
 
-          // Data ID Options - using data_id as the key
+          // Populate initial global options
           const dataIdSet = new Set<string>();
-          Object.keys(response.data).forEach((dataId) => {
-            const items = response.data[dataId];
-            if (items && items.length > 0) {
-              const firstItem = items[0];
-              // Use data_id as the ID and create display string
-              dataIdSet.add(`${dataId}`);
-            }
-          });
-          setDataIdOptions(Array.from(dataIdSet));
-
-          // Extract Party District Options from all items
           const partyDistrictSet = new Set<string>();
+          const districtSet = new Set<string>();
+          const assemblySet = new Set<string>();
+          const parliamentSet = new Set<string>();
+
           allItemsArray.forEach((item) => {
+            if (item.data_id) {
+              dataIdSet.add(`${item.data_id}`);
+            }
             if (item.party_district_id && item.party_district_hi) {
               partyDistrictSet.add(`${item.party_district_hi} - ${item.party_district_id}`);
-            } else if (item.party_district_id) {
-              partyDistrictSet.add(String(item.party_district_id));
+            }
+            if (item.district_id && item.district_hi) {
+              districtSet.add(`${item.district_hi} - ${item.district_id}`);
+            }
+            if (item.ac_no && item.ac_name_hi) {
+              assemblySet.add(`${item.ac_name_hi} - ${item.ac_no}`);
+            }
+            if (item.pc_no && item.pc_name_hi) {
+              parliamentSet.add(`${item.pc_name_hi} - ${item.pc_no}`);
             }
           });
-          setPartyDistrictOptions(Array.from(partyDistrictSet));
 
-          // Other dropdowns are initially empty
-          setDistrictOptions([]);
-          setAssemblyOptions([]);
-          setParliamentOptions([]);
+          setDataIdOptions(Array.from(dataIdSet));
+          setPartyDistrictOptions(Array.from(partyDistrictSet));
+          setDistrictOptions(Array.from(districtSet).map(s => {
+            const parts = s.split(" - ");
+            return { name: parts[0], id: parseInt(parts[1]) };
+          }));
+          setAssemblyOptions(Array.from(assemblySet));
+          setParliamentOptions(Array.from(parliamentSet));
         }
       } catch (error) {
         console.log("Error fetching master filter data:", error);
@@ -147,126 +158,67 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
     fetchMasterFilterData();
   }, []);
 
-  useEffect(() => {
-    if (selectedDataId) {
-      const dataId = extractId(selectedDataId);
-      const items = masterData[dataId] || [];
-
-      const districtMap = new Map();
-      items.forEach(item => {
-        if (item.district_id && item.district_hi) {
-          districtMap.set(item.district_id, {
-            name: item.district_hi,
-            id: item.district_id
-          });
-        }
-      });
-      setDistrictOptions(Array.from(districtMap.values()));
-
-      // Get unique assemblies
-      const assemblies = items
-        .map(item => item.ac_no && item.ac_name_hi ? `${item.ac_name_hi} - ${item.ac_no}` : null)
-        .filter((value): value is string => value !== null && value !== undefined);
-      setAssemblyOptions(Array.from(new Set(assemblies)));
-
-      // Get unique parliaments
-      const parliaments = items
-        .map(item => item.pc_no && item.pc_name_hi ? `${item.pc_name_hi} - ${item.pc_no}` : null)
-        .filter((value): value is string => value !== null && value !== undefined);
-      setParliamentOptions(Array.from(new Set(parliaments)));
-
-      // Update party district options based on selected data ID
-      const partyDistricts = items
-        .map(item => item.party_district_id && item.party_district_hi ? `${item.party_district_hi} - ${item.party_district_id}` : null)
-        .filter((value): value is string => value !== null && value !== undefined);
-
-      if (partyDistricts.length > 0) {
-        setPartyDistrictOptions(Array.from(new Set(partyDistricts)));
-      }
-    } else {
-      // Clear options if no Data ID selected
-      setDistrictOptions([]);
-      setAssemblyOptions([]);
-      setParliamentOptions([]);
-
-      // Clear selected values
-      setSelectedDistrict("");
-      setSelectedAssembly("");
-      setSelectedParliament("");
-    }
-  }, [selectedDataId, masterData]);
-
   const extractId = (value: string): string => {
     if (!value) return "";
     const parts = value.split(" - ");
-    return parts[0].trim();
+    if (parts.length === 1) return parts[0].trim();
+    return parts[parts.length - 1].trim(); // Get the ID which we've standardized to be at the end
   };
 
-  const handleDataIdChange = (value: string) => {
-    setSelectedDataId(value);
+  const getFilteredOptions = (key: string): string[] => {
+    // Return all unique options from the entire dataset (Global)
+    // This allows the user to always see and select anything
+    const results = new Set<string>();
 
-    if (value) {
-      const dataId = extractId(value);
-      const items = masterData[dataId] || [];
+    allItems.forEach(item => {
+      if (key === "dataId" && item.data_id) results.add(`${item.data_id}`);
+      if (key === "partyDistrict" && item.party_district_id && item.party_district_hi) results.add(`${item.party_district_hi} - ${item.party_district_id}`);
+      if (key === "district" && item.district_id && item.district_hi) results.add(`${item.district_hi} - ${item.district_id}`);
+      if (key === "assembly" && item.ac_no && item.ac_name_hi) results.add(`${item.ac_name_hi} - ${item.ac_no}`);
+      if (key === "parliament" && item.pc_no && item.pc_name_hi) results.add(`${item.pc_name_hi} - ${item.pc_no}`);
+    });
 
-      if (items.length > 0) {
-        // Get unique values for auto-select
-        const districts = items
-          .map(item => item.district_hi)
-          .filter((value): value is string => value !== null && value !== undefined);
+    return Array.from(results);
+  };
 
-        const assemblies = items
-          .map(item => item.ac_no && item.ac_name_hi ? `${item.ac_no} - ${item.ac_name_hi}` : null)
-          .filter((value): value is string => value !== null && value !== undefined);
-
-        const parliaments = items
-          .map(item => item.pc_no && item.pc_name_hi ? `${item.pc_no} - ${item.pc_name_hi}` : null)
-          .filter((value): value is string => value !== null && value !== undefined);
-
-        const partyDistricts = items
-          .map(item => item.party_district_id && item.party_district_hi ? `${item.party_district_id} - ${item.party_district_hi}` : null)
-          .filter((value): value is string => value !== null && value !== undefined);
-
-        // Auto-select if only one option
-        if (districts.length === 1) {
-          // For district, we need to send the data_id as district_id
-          setSelectedDistrict(`${items[0].district_id} - ${districts[0]}`);
-        } else {
-          setSelectedDistrict("");
-        }
-
-        setSelectedAssembly(assemblies.length === 1 ? assemblies[0] : "");
-        setSelectedParliament(parliaments.length === 1 ? parliaments[0] : "");
-        setSelectedPartyDistrict(partyDistricts.length === 1 ? partyDistricts[0] : "");
-      }
-    } else {
-      setSelectedDistrict("");
-      setSelectedAssembly("");
-      setSelectedParliament("");
-      setSelectedPartyDistrict("");
+  const handleFilterSelection = (key: string, value: string) => {
+    if (!value) {
+      if (key === "dataId") setSelectedDataId("");
+      else if (key === "partyDistrict") setSelectedPartyDistrict("");
+      else if (key === "district") setSelectedDistrict("");
+      else if (key === "assembly") setSelectedAssembly("");
+      else if (key === "parliament") setSelectedParliament("");
+      return;
     }
 
-    // Close dropdown after selection
-    setActiveDropdown(null);
-  };
+    const id = parseInt(extractId(value), 10);
 
-  const handleDistrictChange = (value: string) => {
-    setSelectedDistrict(value);
-    setActiveDropdown(null);
-  };
+    // Find the first record in the GLOBAL dataset that matches this selection
+    const match = allItems.find(item => {
+      if (key === "dataId") return item.data_id === id;
+      if (key === "partyDistrict") return item.party_district_id === id;
+      if (key === "district") return item.district_id === id;
+      if (key === "assembly") return item.ac_no === id;
+      if (key === "parliament") return item.pc_no === id;
+      return false;
+    });
 
-  const handleAssemblyChange = (value: string) => {
-    setSelectedAssembly(value);
-    setActiveDropdown(null);
-  };
+    if (match) {
+      // Synchronize all 5 fields using this record's data
+      setSelectedDataId(`${match.data_id}`);
+      setSelectedPartyDistrict(match.party_district_hi && match.party_district_id ? `${match.party_district_hi} - ${match.party_district_id}` : "");
+      setSelectedDistrict(match.district_hi && match.district_id ? `${match.district_hi} - ${match.district_id}` : "");
+      setSelectedAssembly(match.ac_name_hi && match.ac_no ? `${match.ac_name_hi} - ${match.ac_no}` : "");
+      setSelectedParliament(match.pc_name_hi && match.pc_no ? `${match.pc_name_hi} - ${match.pc_no}` : "");
+    } else {
+      // Fallback: just set the selected field
+      if (key === "dataId") setSelectedDataId(value);
+      else if (key === "partyDistrict") setSelectedPartyDistrict(value);
+      else if (key === "district") setSelectedDistrict(value);
+      else if (key === "assembly") setSelectedAssembly(value);
+      else if (key === "parliament") setSelectedParliament(value);
+    }
 
-  const handleParliamentChange = (value: string) => {
-    setSelectedParliament(value);
-    setActiveDropdown(null);
-  };
-
-  const handlePartyDistrictChange = (value: string) => {
-    setSelectedPartyDistrict(value);
     setActiveDropdown(null);
   };
 
@@ -370,8 +322,8 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
             <SearchableSelect
               id="dataId"
               value={selectedDataId}
-              onChange={handleDataIdChange}
-              options={dataIdOptions}
+              onChange={(val) => handleFilterSelection("dataId", val)}
+              options={getFilteredOptions("dataId")}
               placeholder="डेटा आईडी"
               label=""
               disabled={loading}
@@ -384,8 +336,8 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
             <SearchableSelect
               id="partyDistrict"
               value={selectedPartyDistrict}
-              onChange={handlePartyDistrictChange}
-              options={partyDistrictOptions}
+              onChange={(val) => handleFilterSelection("partyDistrict", val)}
+              options={getFilteredOptions("partyDistrict")}
               placeholder="पार्टी जिला"
               label=""
               disabled={loading}
@@ -398,11 +350,11 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
             <SearchableSelect
               id="district"
               value={selectedDistrict}
-              onChange={handleDistrictChange}
-              options={districtOptions.map(d => `${d.id} - ${d.name}`)}
+              onChange={(val) => handleFilterSelection("district", val)}
+              options={getFilteredOptions("district")}
               placeholder="ज़िला"
               label=""
-              disabled={loading || !selectedDataId}
+              disabled={loading}
               activeDropdown={activeDropdown}
               onDropdownToggle={setActiveDropdown}
             />
@@ -412,11 +364,11 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
             <SearchableSelect
               id="assembly"
               value={selectedAssembly}
-              onChange={handleAssemblyChange}
-              options={assemblyOptions}
+              onChange={(val) => handleFilterSelection("assembly", val)}
+              options={getFilteredOptions("assembly")}
               placeholder="विधानसभा क्षेत्र"
               label=""
-              disabled={loading || !selectedDataId}
+              disabled={loading}
               activeDropdown={activeDropdown}
               onDropdownToggle={setActiveDropdown}
             />
@@ -426,11 +378,11 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
             <SearchableSelect
               id="parliament"
               value={selectedParliament}
-              onChange={handleParliamentChange}
-              options={parliamentOptions}
+              onChange={(val) => handleFilterSelection("parliament", val)}
+              options={getFilteredOptions("parliament")}
               placeholder="संसदीय क्षेत्र"
               label=""
-              disabled={loading || !selectedDataId}
+              disabled={loading}
               activeDropdown={activeDropdown}
               onDropdownToggle={setActiveDropdown}
             />

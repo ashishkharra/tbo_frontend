@@ -2,7 +2,7 @@ import axios from 'axios';
 //const BASE_URL = 'http://localhost:3500/api';
 //const BASE_URL = 'http://localhost:3500/api'
 const BASE_URL = 'http://192.168.29.176:3500/api';
-export const IMAGE_URL = 'http://localhost:3500';
+export const IMAGE_URL = 'http://192.168.29.176:3500';
 //const BASE_URL = 'http://192.168.1.9:3500/api';
 const getAuthHeaders = async () => {
   const token = localStorage.getItem("token");
@@ -896,6 +896,29 @@ export const generateSurnamesApi = async (dataIds: string[]) => {
   }
 };
 
+export const generateIdsApi = async (dataIds: string[]) => {
+  try {
+    const headers = await getAuthHeaders();
+    // console.log('dat a>>>>>>> ', dataIds)
+    const res = await axios.post(
+      `${BASE_URL}/dataid/generate/ids`,
+      { data_id: dataIds },
+      { headers }
+    );
+
+    // console.log("generateSurnamesApi Response:", res.data);
+    return res.data;
+  } catch (err: any) {
+    console.error("Error in generateIdsApi:", err);
+
+    return {
+      success: false,
+      message: err?.response?.data?.message || err.message || "Server error",
+      data: null,
+    };
+  }
+}
+
 export const getYojnaListApi = async (dataId: string) => {
   try {
     const headers = await getAuthHeaders();
@@ -962,6 +985,81 @@ export const DownloadBoothMaping = async (data_id: any) => {
     return res.data;
   } catch (err: any) {
     console.error("Download error:", err.response?.data || err.message);
+    return {
+      success: false,
+      data: [],
+      message: err.response?.data?.message || "Server error",
+    };
+  }
+};
+
+export const getPermissionModulesApi = async () => {
+  try {
+    const headers = await getAuthHeaders();
+
+    const res = await axios.get(`
+      ${BASE_URL}/auth/get/permission/modules`,
+      { headers }
+    );
+    return res.data;
+  } catch (err: any) {
+    console.error("Error in getPermissionModulesApi:", err);
+
+    return {
+      success: false,
+      message: err?.response?.data?.message || err.message || "Server error",
+      data: null,
+    };
+  }
+};
+
+
+export const getTableColumns = async (tableName: string) => {
+  try {
+    const headers = await getAuthHeaders();
+
+    const res = await axios.get(
+      `${BASE_URL}/auth/get/table/columns?table=${tableName}`,
+      { headers }
+    );
+    return res.data;
+  } catch (err: any) {
+    return {
+      success: false,
+      data: [],
+      message: "Server error",
+    };
+  }
+};
+export const getUserPermissions = async (userId: number) => {
+  try {
+    const headers = await getAuthHeaders();
+
+    const res = await axios.get(
+      `${BASE_URL}/auth/user-permissions/${userId}`,
+      { headers }
+    );
+    return res.data;
+  } catch (err: any) {
+    return {
+      success: false,
+      data: [],
+      message: err.response?.data?.message || "Server error",
+    };
+  }
+};
+
+export const UserPermissionsAssign = async (payload: any) => {
+  try {
+    const headers = await getAuthHeaders();
+
+    const res = await axios.post(
+      `${BASE_URL}/auth/users/assign-modules`,
+      payload,
+      { headers }
+    );
+    return res.data;
+  } catch (err: any) {
     return {
       success: false,
       data: [],
