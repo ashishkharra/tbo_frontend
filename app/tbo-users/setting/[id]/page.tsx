@@ -20,7 +20,14 @@ import {
   Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import { getPermissionModulesApi, getTableColumns, getUserPermissions, UserPermissionsAssign } from "@/apis/api";
+import {
+  getPermissionModulesApi,
+  getTableColumns,
+  getUserPermissions,
+  UserPermissionsAssign,
+  getDataIdAllRow
+} from "@/apis/api";
+import { apiService } from "@/services/api";
 
 interface SubMenu {
   id: string;
@@ -123,9 +130,38 @@ const TBOUsersSetting = () => {
   // States for Data Assign tab
   const [isAddingData, setIsAddingData] = useState(false);
   const [assignments, setAssignments] = useState<any[]>([]);
-  const [formData, setFormData] = useState({
+  interface DataAssignFormData {
+    dbSelect: string;
+    wiseType: string;
+    dataid: string;
+    block: string;
+    gp: string;
+    gram: string;
+    ac: string;
+    bhag: string;
+    section: string;
+    mandal: string;
+    kendra: string;
+    district: string;
+    ageFrom: string;
+    ageTo: string;
+    cast: string;
+    check1: boolean;
+    check2: boolean;
+  }
+
+  const [formData, setFormData] = useState<DataAssignFormData>({
     dbSelect: "",
     wiseType: "",
+    dataid: "",
+    block: "",
+    gp: "",
+    gram: "",
+    ac: "",
+    bhag: "",
+    section: "",
+    mandal: "",
+    kendra: "",
     district: "",
     ageFrom: "",
     ageTo: "",
@@ -133,6 +169,186 @@ const TBOUsersSetting = () => {
     check1: false,
     check2: false,
   });
+
+  const [dataIdOptions, setDataIdOptions] = useState<any[]>([]);
+  const [blockOptions, setBlockOptions] = useState<any[]>([]);
+  const [gpOptions, setGpOptions] = useState<any[]>([]);
+  const [gramOptions, setGramOptions] = useState<any[]>([]);
+  const [acOptions, setAcOptions] = useState<any[]>([]);
+  const [bhagOptions, setBhagOptions] = useState<any[]>([]);
+  const [sectionOptions, setSectionOptions] = useState<any[]>([]);
+  const [mandalOptions, setMandalOptions] = useState<any[]>([]);
+  const [kendraOptions, setKendraOptions] = useState<any[]>([]);
+  const [loadingDataOptions, setLoadingDataOptions] = useState(false);
+
+  // Fetch Data IDs when the Data Assign tab is active
+  useEffect(() => {
+    if (activeTab === "data_assign") {
+      const fetchDataIds = async () => {
+        try {
+          const response = await getDataIdAllRow();
+          if (response.success && response.data) {
+            setDataIdOptions(response.data);
+          }
+        } catch (error) {
+          console.error("Error fetching data IDs:", error);
+        }
+      };
+      fetchDataIds();
+    }
+  }, [activeTab]);
+
+  // Fetch Hierarchical Master Options (Blocks, ACs) when Data ID changes
+  useEffect(() => {
+    const fetchMasterOptions = async () => {
+      if (formData.dataid && ["block", "gp_ward", "gram", "bhag", "section", "mandal", "kendra"].includes(formData.wiseType)) {
+        setLoadingDataOptions(true);
+        try {
+          const selectedData = dataIdOptions.find(d => d.data_id === formData.dataid);
+          const district = selectedData?.district || "";
+
+          const response = await apiService.fetchLiveVoterListMasterFilterOptions({
+            dataId: formData.dataid,
+            district: district
+          });
+
+          if (response) {
+            setBlockOptions(response.blockOptions?.map(b => ({ id: b, name: b })) || []);
+            setAcOptions(response.assemblyOptions?.map(a => ({ id: a, name: a })) || []);
+          }
+        } catch (error) {
+          console.error("Error fetching master options:", error);
+        } finally {
+          setLoadingDataOptions(false);
+        }
+      } else {
+        setBlockOptions([]);
+        setAcOptions([]);
+      }
+    };
+    fetchMasterOptions();
+  }, [formData.dataid, formData.wiseType, dataIdOptions]);
+
+  // Fetch GPs based on Block
+  useEffect(() => {
+    const fetchGPs = async () => {
+      if (formData.block && ["gp_ward", "gram"].includes(formData.wiseType)) {
+        try {
+          const selectedData = dataIdOptions.find(d => d.data_id === formData.dataid);
+          const response = await apiService.getLiveVoterListFilterOptions({
+            block: formData.block,
+            district: selectedData?.district || ""
+          });
+          setGpOptions(response.gps || []);
+        } catch (error) {
+          console.error("Error fetching GPs:", error);
+        }
+      } else {
+        setGpOptions([]);
+      }
+    };
+    fetchGPs();
+  }, [formData.block, formData.wiseType, formData.dataid, dataIdOptions]);
+
+  // Fetch Grams based on GP
+  useEffect(() => {
+    const fetchGrams = async () => {
+      if (formData.gp && formData.wiseType === "gram") {
+        try {
+          const selectedData = dataIdOptions.find(d => d.data_id === formData.dataid);
+          const response = await apiService.getLiveVoterListFilterOptions({
+            gp: formData.gp,
+            block: formData.block,
+            district: selectedData?.district || ""
+          });
+          setGramOptions(response.grams || []);
+        } catch (error) {
+          console.error("Error fetching grams:", error);
+        }
+      } else {
+        setGramOptions([]);
+      }
+    };
+    fetchGrams();
+  }, [formData.gp, formData.wiseType, formData.block, formData.dataid, dataIdOptions]);
+
+  // Fetch Mandals based on AC
+  useEffect(() => {
+    const fetchMandals = async () => {
+      if (formData.ac && ["mandal", "kendra"].includes(formData.wiseType)) {
+        try {
+          const res = await apiService.fetchLiveVoterListMasterFilterOptions({
+            assembly: formData.ac
+          });
+          setMandalOptions(res.mandalOptions?.map(m => ({ id: m, name: m })) || []);
+        } catch (error) {
+          console.error("Error fetching mandals:", error);
+        }
+      } else {
+        setMandalOptions([]);
+      }
+    };
+    fetchMandals();
+  }, [formData.ac, formData.wiseType]);
+
+  // Fetch Kendras based on Mandal
+  useEffect(() => {
+    const fetchKendras = async () => {
+      if (formData.mandal && formData.wiseType === "kendra") {
+        try {
+          const res = await apiService.fetchLiveVoterListMasterFilterOptions({
+            assembly: formData.ac,
+            mandal: formData.mandal
+          });
+          setKendraOptions(res.kendraOptions?.map(k => ({ id: k, name: k })) || []);
+        } catch (error) {
+          console.error("Error fetching kendras:", error);
+        }
+      } else {
+        setKendraOptions([]);
+      }
+    };
+    fetchKendras();
+  }, [formData.mandal, formData.wiseType, formData.ac]);
+
+  // Fetch Bhags based on AC
+  useEffect(() => {
+    const fetchBhags = async () => {
+      if (formData.ac && ["bhag", "section"].includes(formData.wiseType)) {
+        try {
+          const response = await apiService.getLiveVoterListFilterOptions({
+            assembly: formData.ac
+          });
+          setBhagOptions(response.bhagNos || []);
+        } catch (error) {
+          console.error("Error fetching bhags:", error);
+        }
+      } else {
+        setBhagOptions([]);
+      }
+    };
+    fetchBhags();
+  }, [formData.ac, formData.wiseType]);
+
+  // Fetch Sections based on Bhag
+  useEffect(() => {
+    const fetchSections = async () => {
+      if (formData.bhag && formData.wiseType === "section") {
+        try {
+          const response = await apiService.getLiveVoterListFilterOptions({
+            assembly: formData.ac,
+            bhagNo: formData.bhag
+          });
+          setSectionOptions(response.sectionNos || []);
+        } catch (error) {
+          console.error("Error fetching sections:", error);
+        }
+      } else {
+        setSectionOptions([]);
+      }
+    };
+    fetchSections();
+  }, [formData.bhag, formData.wiseType, formData.ac]);
 
   // States for Column Permissions tab
   const [selectedColumnDB, setSelectedColumnDB] = useState("");
@@ -385,6 +601,15 @@ const TBOUsersSetting = () => {
     setFormData({
       dbSelect: "",
       wiseType: "",
+      dataid: "",
+      block: "",
+      gp: "",
+      gram: "",
+      ac: "",
+      bhag: "",
+      section: "",
+      mandal: "",
+      kendra: "",
       district: "",
       ageFrom: "",
       ageTo: "",
@@ -852,7 +1077,7 @@ const TBOUsersSetting = () => {
                 </h4>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => { }} // Global save logic
+                    onClick={() => { }}
                     className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors shadow-sm"
                     title="Save All"
                   >
@@ -901,6 +1126,19 @@ const TBOUsersSetting = () => {
                             setFormData({
                               ...formData,
                               wiseType: e.target.value,
+                              dataid: "",
+                              block: "",
+                              gp: "",
+                              gram: "",
+                              ac: "",
+                              bhag: "",
+                              section: "",
+                              mandal: "",
+                              kendra: "",
+                              district: "",
+                              ageFrom: "",
+                              ageTo: "",
+                              cast: "",
                             })
                           }
                         >
@@ -919,76 +1157,201 @@ const TBOUsersSetting = () => {
                           <option value="bhag">Bhag Wise</option>
                         </select>
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-black">
-                          DISTRICT
-                        </label>
-                        <select
-                          className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
-                          value={formData.district}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              district: e.target.value,
-                            })
-                          }
-                        >
-                          <option value="">Select District</option>
-                          <option value="d1">District 1</option>
-                          <option value="d2">District 2</option>
-                        </select>
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-4 gap-4 mt-4 items-end">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-black">
-                          AGE FROM
-                        </label>
-                        <input
-                          type="number"
-                          placeholder="0"
-                          className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
-                          value={formData.ageFrom}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              ageFrom: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-black">
-                          AGE TO
-                        </label>
-                        <input
-                          type="number"
-                          placeholder="100"
-                          className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
-                          value={formData.ageTo}
-                          onChange={(e) =>
-                            setFormData({ ...formData, ageTo: e.target.value })
-                          }
-                        />
-                      </div>
+                      {/* Hierarchical Fields */}
+                      {["block", "gp_ward", "gram", "bhag", "section", "mandal", "kendra"].includes(formData.wiseType) && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-black uppercase">Data ID</label>
+                          <select
+                            className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
+                            value={formData.dataid}
+                            onChange={(e) => setFormData({
+                              ...formData, dataid: e.target.value,
+                              block: "", gp: "", gram: "", ac: "", bhag: "", section: "", mandal: "", kendra: ""
+                            })}
+                          >
+                            <option value="">Select Data ID</option>
+                            {dataIdOptions.map((opt) => (
+                              <option key={opt.data_id} value={opt.data_id}>{opt.data_id} - {opt.ac_name || opt.district}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-black">
-                          CAST
-                        </label>
-                        <select
-                          className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
-                          value={formData.cast}
-                          onChange={(e) =>
-                            setFormData({ ...formData, cast: e.target.value })
-                          }
-                        >
-                          <option value="">Select Cast</option>
-                          <option value="c1">Cast A</option>
-                          <option value="c2">Cast B</option>
-                        </select>
-                      </div>
+                      {/* Block/AC selection */}
+                      {["block", "gp_ward", "gram"].includes(formData.wiseType) && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-black uppercase">Block</label>
+                          <select
+                            className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
+                            value={formData.block}
+                            disabled={loadingDataOptions || !formData.dataid}
+                            onChange={(e) => setFormData({ ...formData, block: e.target.value, gp: "", gram: "" })}
+                          >
+                            <option value="">{loadingDataOptions ? "Loading..." : "Select Block"}</option>
+                            {blockOptions.map((opt) => <option key={opt.id} value={opt.name}>{opt.name}</option>)}
+                          </select>
+                        </div>
+                      )}
+
+                      {["bhag", "section", "mandal", "kendra"].includes(formData.wiseType) && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-black uppercase">Assembly (AC)</label>
+                          <select
+                            className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
+                            value={formData.ac}
+                            disabled={loadingDataOptions || !formData.dataid}
+                            onChange={(e) => setFormData({ ...formData, ac: e.target.value, bhag: "", section: "", mandal: "", kendra: "" })}
+                          >
+                            <option value="">{loadingDataOptions ? "Loading..." : "Select AC"}</option>
+                            {acOptions.map((opt) => <option key={opt.id} value={opt.name}>{opt.name}</option>)}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* GP/Bhag/Mandal selection */}
+                      {["gp_ward", "gram"].includes(formData.wiseType) && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-black uppercase">GP / Ward</label>
+                          <select
+                            className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
+                            value={formData.gp}
+                            disabled={!formData.block}
+                            onChange={(e) => setFormData({ ...formData, gp: e.target.value, gram: "" })}
+                          >
+                            <option value="">Select GP</option>
+                            {gpOptions.map((opt: any) => <option key={opt} value={opt}>{opt}</option>)}
+                          </select>
+                        </div>
+                      )}
+
+                      {["bhag", "section"].includes(formData.wiseType) && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-black uppercase">Bhag</label>
+                          <select
+                            className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
+                            value={formData.bhag}
+                            disabled={!formData.ac}
+                            onChange={(e) => setFormData({ ...formData, bhag: e.target.value, section: "" })}
+                          >
+                            <option value="">Select Bhag</option>
+                            {bhagOptions.map((opt: any) => <option key={opt} value={opt}>{opt}</option>)}
+                          </select>
+                        </div>
+                      )}
+
+                      {["mandal", "kendra"].includes(formData.wiseType) && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-black uppercase">Mandal</label>
+                          <select
+                            className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
+                            value={formData.mandal}
+                            disabled={!formData.ac}
+                            onChange={(e) => setFormData({ ...formData, mandal: e.target.value, kendra: "" })}
+                          >
+                            <option value="">Select Mandal</option>
+                            {mandalOptions.map((opt: any) => <option key={opt.id} value={opt.name}>{opt.name}</option>)}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Final hierarchical level (Gram/Section/Kendra) */}
+                      {formData.wiseType === "gram" && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-black uppercase">Village / Gram</label>
+                          <select
+                            className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
+                            value={formData.gram}
+                            disabled={!formData.gp}
+                            onChange={(e) => setFormData({ ...formData, gram: e.target.value })}
+                          >
+                            <option value="">Select Gram</option>
+                            {gramOptions.map((opt: any) => <option key={opt} value={opt}>{opt}</option>)}
+                          </select>
+                        </div>
+                      )}
+
+                      {formData.wiseType === "section" && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-black uppercase">Section</label>
+                          <select
+                            className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
+                            value={formData.section}
+                            disabled={!formData.bhag}
+                            onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                          >
+                            <option value="">Select Section</option>
+                            {sectionOptions.map((opt: any) => <option key={opt} value={opt}>{opt}</option>)}
+                          </select>
+                        </div>
+                      )}
+
+                      {formData.wiseType === "kendra" && (
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-black uppercase">Kendra</label>
+                          <select
+                            className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
+                            value={formData.kendra}
+                            disabled={!formData.mandal}
+                            onChange={(e) => setFormData({ ...formData, kendra: e.target.value })}
+                          >
+                            <option value="">Select Kendra</option>
+                            {kendraOptions.map((opt: any) => <option key={opt.id} value={opt.name}>{opt.name}</option>)}
+                          </select>
+                        </div>
+                      )}
+
+                      {formData.wiseType === 'district' && (
+                        <>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-black uppercase">District</label>
+                            <select
+                              className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
+                              value={formData.district}
+                              onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                            >
+                              <option value="">Select District</option>
+                              <option value="d1">District 1</option>
+                              <option value="d2">District 2</option>
+                            </select>
+                          </div>
+
+                          <div className="grid grid-cols-4 gap-4 mt-4 items-end col-span-3">
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-black uppercase">Age From</label>
+                              <input
+                                type="number"
+                                placeholder="0"
+                                className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
+                                value={formData.ageFrom}
+                                onChange={(e) => setFormData({ ...formData, ageFrom: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-black uppercase">Age To</label>
+                              <input
+                                type="number"
+                                placeholder="100"
+                                className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
+                                value={formData.ageTo}
+                                onChange={(e) => setFormData({ ...formData, ageTo: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-black uppercase">Cast</label>
+                              <select
+                                className="w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white outline-none focus:ring-2 focus:ring-blue-500/20 text-black"
+                                value={formData.cast}
+                                onChange={(e) => setFormData({ ...formData, cast: e.target.value })}
+                              >
+                                <option value="">Select Cast</option>
+                                <option value="c1">Cast A</option>
+                                <option value="c2">Cast B</option>
+                              </select>
+                            </div>
+                          </div>
+                        </>
+                      )}
                       <div className="mt-5 flex justify-end">
                         <button
                           onClick={handleAddAssignment}
@@ -1026,8 +1389,24 @@ const TBOUsersSetting = () => {
                             <span className="text-[9px] font-bold text-black uppercase">
                               DB / Type
                             </span>
-                            <span className="text-xs font-bold text-black">
-                              {item.dbSelect} / {item.wiseType}
+                            <span className="text-xs font-bold text-black capitalize">
+                              {item.dbSelect} / {item.wiseType} Wise
+                              {item.dataid && ` (${item.dataid})`}
+                              {item.block && ` - ${item.block}`}
+                              {item.ac && ` - ${item.ac}`}
+                              {item.gp && ` - ${item.gp}`}
+                              {item.gram && ` - ${item.gram}`}
+                              {item.bhag && ` - Bhag ${item.bhag}`}
+                              {item.section && ` - Sec ${item.section}`}
+                              {item.mandal && ` - ${item.mandal}`}
+                              {item.kendra && ` - ${item.kendra}`}
+                              {item.wiseType === 'district' && (
+                                <span className="block mt-0.5 text-[10px]">
+                                  {item.district && `Dist: ${item.district}`}
+                                  {item.ageFrom && ` | Age: ${item.ageFrom}-${item.ageTo || '100'}`}
+                                  {item.cast && ` | Cast: ${item.cast}`}
+                                </span>
+                              )}
                             </span>
                           </div>
                           <div className="flex flex-col">
