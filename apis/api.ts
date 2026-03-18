@@ -26,9 +26,12 @@ export const loginApi = async (data: any) => {
 
 export const ImportDatasetCsv = async (formData: any) => {
   try {
+    const headers = await getAuthHeaders();
+
     const res = await axios.post(
       `${BASE_URL}/dataset/import`,
-      formData
+      formData,
+      { headers }
     );
 
     return res.data;
@@ -116,6 +119,25 @@ export const getTboUsers = async () => {
     };
   }
 };
+
+export const getUserAssignmentsByToken = async (token: any) => {
+  try {
+    const headers = await getAuthHeaders();
+
+    const res = await axios.get(
+      `${BASE_URL}/user-assignments/${token}?_t=${Date.now()}`,
+      { headers }
+    );
+
+    return res.data;
+  } catch (err: any) {
+    return {
+      success: false,
+      data: [],
+      message: "Server error",
+    };
+  }
+}
 
 export const getTboModules = async () => {
   try {

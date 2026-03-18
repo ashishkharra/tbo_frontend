@@ -66,6 +66,8 @@ import ModuleAssignmentModal from "./module-assignment-modal";
 import { DeleteTboUsers, getTboModules, getTboTeams, getTboUsers, PostTboTeamMembers, PostTboUsers, TboUsersChangePassword, UpdateTboUsers } from "@/apis/api";
 import TBOUsersHotTable from "./TBOUsersHotTable";
 
+import { getUserAssignmentsByToken } from '../../apis/api'
+
 const useModulesCodeMap = () => {
   const [map, setMap] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -1261,7 +1263,6 @@ const ROLE_PERMISSIONS: Record<AppUserRole, string[]> = {
 
 export default function TBOUsersPage() {
   const { user, hasRole, hasPermission, loading: authLoading } = useAuth();
-  console.log('user ->>>>>>>>> ', typeof (user?.id))
   const modulesCodeMap = {}
 
   const [users, setUsers] = useState<TBOUser[]>([]);
@@ -1352,7 +1353,6 @@ export default function TBOUsersPage() {
   const [parentFilter, setParentFilter] = useState<"all" | number>("all");
   const [showNewUserModal, setShowNewUserModal] = useState(false);
   useEffect(() => {
-    console.log("TBO users page loaded");
     fetchUsers();
   }, []);
   useEffect(() => {
@@ -2033,7 +2033,7 @@ export default function TBOUsersPage() {
       setLoading(true);
       setMessage("Copying assignment from token...");
 
-      const result = await apiClient.getUserAssignmentsByToken(token.trim());
+      const result = await getUserAssignmentsByToken(token.trim());
 
       if (result && result.success && result.data) {
         const saveResult = await apiClient.saveUserAssignments(
@@ -2882,15 +2882,15 @@ export default function TBOUsersPage() {
     try {
       setLoading(true);
 
-      try {
-        const tokenGenRes =
-          await apiClient.generateTokensForExistingAssignments();
-        if (tokenGenRes && tokenGenRes.success && tokenGenRes.count > 0) {
-          setMessage(
-            `Generated tokens for ${tokenGenRes.count} existing assignments`
-          );
-        }
-      } catch (tokenError: any) { }
+      // try {
+      //   const tokenGenRes =
+      //     await apiClient.generateTokensForExistingAssignments();
+      //   if (tokenGenRes && tokenGenRes.success && tokenGenRes.count > 0) {
+      //     setMessage(
+      //       `Generated tokens for ${tokenGenRes.count} existing assignments`
+      //     );
+      //   }
+      // } catch (tokenError: any) { }
 
       const res = await getTboUsers();
       if (res.success && res.data) {
@@ -2922,76 +2922,76 @@ export default function TBOUsersPage() {
             const hierarchicalDataFromUsersTable =
               user.hierarchicalDataAssignment;
 
-            try {
-              const assignmentsRes = await apiClient.getUserAssignments(
-                user.id
-              );
+            // try {
+            //   const assignmentsRes = await apiClient.getUserAssignments(
+            //     user.id
+            //   );
 
-              if (assignmentsRes && assignmentsRes.success) {
-                if (
-                  assignmentsRes.data &&
-                  typeof assignmentsRes.data === "object" &&
-                  !Array.isArray(assignmentsRes.data)
-                ) {
-                  const hasData = Object.keys(assignmentsRes.data).length > 0;
+            //   if (assignmentsRes && assignmentsRes.success) {
+            //     if (
+            //       assignmentsRes.data &&
+            //       typeof assignmentsRes.data === "object" &&
+            //       !Array.isArray(assignmentsRes.data)
+            //     ) {
+            //       const hasData = Object.keys(assignmentsRes.data).length > 0;
 
-                  if (hasData) {
-                    user.userAssignments = assignmentsRes.data;
+            //       if (hasData) {
+            //         user.userAssignments = assignmentsRes.data;
 
-                    if (
-                      !hierarchicalDataFromUsersTable ||
-                      (typeof hierarchicalDataFromUsersTable === "object" &&
-                        Object.keys(hierarchicalDataFromUsersTable).length ===
-                        0)
-                    ) {
-                      user.hierarchicalDataAssignment = assignmentsRes.data;
-                    } else if (hierarchicalDataFromUsersTable) {
-                      user.hierarchicalDataAssignment =
-                        hierarchicalDataFromUsersTable;
-                    }
-                  } else {
-                    user.userAssignments = {};
+            //         if (
+            //           !hierarchicalDataFromUsersTable ||
+            //           (typeof hierarchicalDataFromUsersTable === "object" &&
+            //             Object.keys(hierarchicalDataFromUsersTable).length ===
+            //             0)
+            //         ) {
+            //           user.hierarchicalDataAssignment = assignmentsRes.data;
+            //         } else if (hierarchicalDataFromUsersTable) {
+            //           user.hierarchicalDataAssignment =
+            //             hierarchicalDataFromUsersTable;
+            //         }
+            //       } else {
+            //         user.userAssignments = {};
 
-                    if (hierarchicalDataFromUsersTable) {
-                      user.hierarchicalDataAssignment =
-                        hierarchicalDataFromUsersTable;
-                    } else {
-                      user.hierarchicalDataAssignment = {};
-                    }
-                  }
-                } else {
-                  user.userAssignments = {};
+            //         if (hierarchicalDataFromUsersTable) {
+            //           user.hierarchicalDataAssignment =
+            //             hierarchicalDataFromUsersTable;
+            //         } else {
+            //           user.hierarchicalDataAssignment = {};
+            //         }
+            //       }
+            //     } else {
+            //       user.userAssignments = {};
 
-                  if (hierarchicalDataFromUsersTable) {
-                    user.hierarchicalDataAssignment =
-                      hierarchicalDataFromUsersTable;
-                  } else {
-                    user.hierarchicalDataAssignment = {};
-                  }
-                }
-              } else {
-                user.userAssignments = {};
+            //       if (hierarchicalDataFromUsersTable) {
+            //         user.hierarchicalDataAssignment =
+            //           hierarchicalDataFromUsersTable;
+            //       } else {
+            //         user.hierarchicalDataAssignment = {};
+            //       }
+            //     }
+            //   } else {
+            //     user.userAssignments = {};
 
-                if (hierarchicalDataFromUsersTable) {
-                  user.hierarchicalDataAssignment =
-                    hierarchicalDataFromUsersTable;
-                } else {
-                  user.hierarchicalDataAssignment = {};
-                }
-              }
-            } catch (error) {
-              console.error(
-                `Error fetching assignments for user ${user.id}:`,
-                error
-              );
-              user.userAssignments = {};
-              if (hierarchicalDataFromUsersTable) {
-                user.hierarchicalDataAssignment =
-                  hierarchicalDataFromUsersTable;
-              } else {
-                user.hierarchicalDataAssignment = {};
-              }
-            }
+            //     if (hierarchicalDataFromUsersTable) {
+            //       user.hierarchicalDataAssignment =
+            //         hierarchicalDataFromUsersTable;
+            //     } else {
+            //       user.hierarchicalDataAssignment = {};
+            //     }
+            //   }
+            // } catch (error) {
+            //   console.error(
+            //     `Error fetching assignments for user ${user.id}:`,
+            //     error
+            //   );
+            //   user.userAssignments = {};
+            //   if (hierarchicalDataFromUsersTable) {
+            //     user.hierarchicalDataAssignment =
+            //       hierarchicalDataFromUsersTable;
+            //   } else {
+            //     user.hierarchicalDataAssignment = {};
+            //   }
+            // }
 
             user.assignment_tokens = assignmentTokensFromApi;
             user.assignment_token = assignmentTokenFromApi;

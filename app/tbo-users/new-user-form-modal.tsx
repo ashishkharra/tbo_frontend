@@ -124,7 +124,7 @@ export default function NewUserFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100]"
+      className="fixed inset-0 z-[1000]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

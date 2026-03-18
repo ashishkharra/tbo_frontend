@@ -294,40 +294,40 @@ export default function TBOUsersHotTable({
             wrapper.style.alignItems = "center";
 
             // Modules button
-            const modulesBtn = document.createElement("button");
-            modulesBtn.textContent = "Modules";
-            Object.assign(modulesBtn.style, btnStyle());
-            modulesBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                onModulesClick(user);
-            });
-            wrapper.appendChild(modulesBtn);
+            // const modulesBtn = document.createElement("button");
+            // modulesBtn.textContent = "Modules";
+            // Object.assign(modulesBtn.style, btnStyle());
+            // modulesBtn.addEventListener("click", (e) => {
+            //     e.stopPropagation();
+            //     onModulesClick(user);
+            // });
+            // wrapper.appendChild(modulesBtn);
 
             // Data Assign button
-            if (hasPermission("users:update") && Number(user.id)) {
-                const dataBtn = document.createElement("button");
-                dataBtn.textContent = "Data Assign";
-                Object.assign(dataBtn.style, btnStyle());
-                dataBtn.addEventListener("click", async (e) => {
-                    e.stopPropagation();
-                    await onDataAssignClick(user);
-                });
-                wrapper.appendChild(dataBtn);
-            }
+            // if (hasPermission("users:update") && Number(user.id)) {
+            //     const dataBtn = document.createElement("button");
+            //     dataBtn.textContent = "Data Assign";
+            //     Object.assign(dataBtn.style, btnStyle());
+            //     dataBtn.addEventListener("click", async (e) => {
+            //         e.stopPropagation();
+            //         await onDataAssignClick(user);
+            //     });
+            //     wrapper.appendChild(dataBtn);
+            // }
 
             // Team button
-            const isNew =
-                user.id && (String(user.id).startsWith("new") || String(user.id).startsWith("blank-"));
-            if (!isNew) {
-                const teamBtn = document.createElement("button");
-                teamBtn.textContent = "Team";
-                Object.assign(teamBtn.style, btnStyle());
-                teamBtn.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    onParentClick(user);
-                });
-                wrapper.appendChild(teamBtn);
-            }
+            // const isNew =
+            //     user.id && (String(user.id).startsWith("new") || String(user.id).startsWith("blank-"));
+            // if (!isNew) {
+            //     const teamBtn = document.createElement("button");
+            //     teamBtn.textContent = "Team";
+            //     Object.assign(teamBtn.style, btnStyle());
+            //     teamBtn.addEventListener("click", (e) => {
+            //         e.stopPropagation();
+            //         onParentClick(user);
+            //     });
+            //     wrapper.appendChild(teamBtn);
+            // }
 
             // Setting link
             const settingLink = document.createElement("a");
@@ -337,6 +337,9 @@ export default function TBOUsersHotTable({
                 ...btnStyle(),
                 textDecoration: "none",
                 display: "inline-block",
+                width: "100%",
+                textAlign: "center",
+                margin:"0 40px 0 40px"
             });
             wrapper.appendChild(settingLink);
 
