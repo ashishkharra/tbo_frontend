@@ -16,7 +16,7 @@ import { useAuth } from "../../../contexts/AuthContext";
 import LiveVoterListNavbar from "@/components/LiveVoterListNavbar";
 import { apiService } from "../../../services/api";
 import { useSharedDataId } from "../../hook/useSharedDataId";
-import { generateIdsApi, generateSurnamesApi } from "@/apis/api";
+import axiosInstance, { generateIdsApi, generateSurnamesApi, syncSurnameApi } from "@/apis/api";
 
 // Define the interface locally since it's not exported from LiveMasterFilter
 interface LiveMasterFilterValues {
@@ -40,12 +40,13 @@ interface FamilyIdResponse {
   recordsUpdated: number;
 }
 
-interface CastIdResponse {
+type CastIdResponse = {
   success: boolean;
   message: string;
-  processed: number;
-  recordsUpdated: number;
-}
+  insertedRows?: number;
+  recordsUpdated?: number; // fallback if needed
+  processed?: number;
+};
 
 export default function LiveVoterListImportExportPage() {
   // Handle generate family IDs
@@ -91,8 +92,7 @@ export default function LiveVoterListImportExportPage() {
     } catch (error) {
       console.error("Error generating family IDs:", error);
       alert(
-        `Error generating family IDs: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Error generating family IDs: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
@@ -141,8 +141,7 @@ export default function LiveVoterListImportExportPage() {
     } catch (error) {
       console.error("Error applying cast ID on family:", error);
       alert(
-        `Error applying cast ID on family: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Error applying cast ID on family: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
@@ -333,34 +332,19 @@ export default function LiveVoterListImportExportPage() {
       setApplyingCastIdBySurname(true);
       setCastIdResult(null);
 
-      // Check if the method exists and is callable
-      let result: CastIdResponse;
-      if (typeof (apiService as any).castIdBySurnameOnFamily === "function") {
-        result = await (apiService as any).castIdBySurnameOnFamily(
-          selectedDataIds
-        );
-      } else {
-        // fallback: simulate success
-        result = {
-          success: true,
-          recordsUpdated: selectedDataIds.length,
-          message: "Simulated (by surname)",
-          processed: selectedDataIds.length,
-        };
-      }
+      const result: CastIdResponse = await syncSurnameApi(selectedDataIds);
 
       setCastIdResult(result);
 
       if (result.success) {
-        alert(`Success! ${result.recordsUpdated} records updated.`);
+        alert(`Success! ${result?.insertedRows || result.recordsUpdated || 0} records updated.`);
       } else {
         alert(`Error: ${result.message}`);
       }
     } catch (error) {
       console.error("Error applying cast ID by surname on family:", error);
       alert(
-        `Error applying cast ID by surname on family: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Error applying cast ID by surname on family: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
@@ -400,8 +384,7 @@ export default function LiveVoterListImportExportPage() {
     } catch (error) {
       console.error("Error generating surnames:", error);
       alert(
-        `Error generating surnames: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Error generating surnames: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
@@ -441,8 +424,7 @@ export default function LiveVoterListImportExportPage() {
     } catch (error) {
       console.error("Error generating ids:", error);
       alert(
-        `Error generating ids: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Error generating ids: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     } finally {
@@ -481,11 +463,10 @@ export default function LiveVoterListImportExportPage() {
                     onClick={handleGenerateIds}
                     disabled={isDisabled}
                     className={`flex items-center gap-2 px-4 py-2 rounded transition-colors duration-200 font-medium text-sm
-        ${
-          isDisabled
-            ? "bg-gray-400 cursor-not-allowed"
-            : "bg-gray-600 text-white hover:bg-gray-700 cursor-pointer"
-        }`}
+        ${isDisabled
+                        ? "bg-gray-400 cursor-not-allowed"
+                        : "bg-gray-600 text-white hover:bg-gray-700 cursor-pointer"
+                      }`}
                     title={tooltip}
                   >
                     <RefreshCw
@@ -500,11 +481,10 @@ export default function LiveVoterListImportExportPage() {
                     onClick={handleGenerateSurnames}
                     disabled={isDisabled}
                     className={`flex items-center gap-2 px-4 py-2 rounded transition-colors duration-200 font-medium text-sm
-        ${
-          isDisabled
-            ? "bg-gray-400 cursor-not-allowed"
-            : "bg-gray-600 text-white hover:bg-gray-700 cursor-pointer"
-        }`}
+        ${isDisabled
+                        ? "bg-gray-400 cursor-not-allowed"
+                        : "bg-gray-600 text-white hover:bg-gray-700 cursor-pointer"
+                      }`}
                     title={tooltip}
                   >
                     <RefreshCw
@@ -602,16 +582,14 @@ export default function LiveVoterListImportExportPage() {
               </div>
               {familyIdResult && (
                 <div
-                  className={`mt-4 p-3 rounded ${
-                    familyIdResult.success
-                      ? "bg-green-50 border border-green-200"
-                      : "bg-red-50 border-red-200"
-                  }`}
+                  className={`mt-4 p-3 rounded ${familyIdResult.success
+                    ? "bg-green-50 border border-green-200"
+                    : "bg-red-50 border-red-200"
+                    }`}
                 >
                   <p
-                    className={`text-sm ${
-                      familyIdResult.success ? "text-green-800" : "text-red-800"
-                    }`}
+                    className={`text-sm ${familyIdResult.success ? "text-green-800" : "text-red-800"
+                      }`}
                   >
                     {familyIdResult.message}
                   </p>
@@ -630,16 +608,14 @@ export default function LiveVoterListImportExportPage() {
               )}
               {castIdResult && (
                 <div
-                  className={`mt-4 p-3 rounded ${
-                    castIdResult.success
-                      ? "bg-green-50 border border-green-200"
-                      : "bg-red-50 border-red-200"
-                  }`}
+                  className={`mt-4 p-3 rounded ${castIdResult.success
+                    ? "bg-green-50 border border-green-200"
+                    : "bg-red-50 border-red-200"
+                    }`}
                 >
                   <p
-                    className={`text-sm ${
-                      castIdResult.success ? "text-green-800" : "text-red-800"
-                    }`}
+                    className={`text-sm ${castIdResult.success ? "text-green-800" : "text-red-800"
+                      }`}
                   >
                     {castIdResult.message}
                   </p>

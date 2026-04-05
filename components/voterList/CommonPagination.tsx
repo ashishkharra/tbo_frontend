@@ -45,7 +45,7 @@ export const CommonPagination: React.FC<Props> = ({
   const getEndIndex = (): number => {
     if (totalItems === 0) return 0;
     if (itemsPerPage === "All") return totalItems;
-    return Math.min(currentPage * (itemsPerPage as number), totalItems);
+    return (currentPage - 1) * (itemsPerPage as number) + currentPageItemCount;
   };
 
   const startIndex = getStartIndex();
@@ -219,8 +219,9 @@ export const CommonPagination: React.FC<Props> = ({
                      transition-all duration-200 outline-none cursor-pointer"
             disabled={loading}
           >
-            <option value={10}>10</option>
-            <option value={25}>25</option>
+            <option value={1000}>1000</option>
+            <option value={2000}>2000</option>
+            <option value={5000}>5000</option>
             <option value={50}>50</option>
             <option value={100}>100</option>
             <option value="All">All</option>

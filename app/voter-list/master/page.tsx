@@ -7,49 +7,41 @@ import { registerAllModules } from 'handsontable/registry';
 import 'handsontable/dist/handsontable.full.min.css';
 import type { ColumnSettings } from 'handsontable/settings';
 import {
-  Play,
   Trash2,
   Download,
   FileText,
   Upload,
-  X,
   Loader2,
-  ChevronLeft,
-  ChevronRight
 } from 'lucide-react';
-import { addRowInDataIdImportMaster, dataidImportMasterTable } from '@/apis/api';
+import {
+  addRowInDataIdImportMaster,
+  dataidImportMasterTable,
+  addEmptyRowsApi,
+  deleteMasterRowApi,
+  saveMasterPatchApi,
+  downloadMasterExcelApi,
+  importMasterCsvApi
+} from '@/apis/api';
 
 registerAllModules();
 
 interface DataItem {
   id: number;
-  data_id: number;
-  data_id_name_hi: string;
-  data_id_name_en: string;
-  ac_no: number;
-  ac_name_hi: string;
-  ac_name_en: string;
-  pc_no: number;
-  pc_name_hi: string;
-  pc_name_en: string;
-  district_id: number;
-  district_hi: string;
-  district_en: string;
-  party_district_id: number;
-  party_district_hi: string;
-  party_district_en: string;
-  div_id: number;
-  div_name_hi: string;
-  div_name_en: string;
-  data_range: any;
-  is_active: number;
-  updated_at: string;
+  data_id: number | string;
+  [key: string]: any;
 }
+
 interface FilterOptions {
   data_id?: number[];
   is_active?: number[];
   dropdown_name?: string[];
   reg_name?: string[];
+}
+
+interface DataIdDropdownRow {
+  data_id: number | string;
+  data_id_name_hi?: string;
+  data_id_name_en?: string;
 }
 
 interface ApiResponse {
@@ -62,6 +54,7 @@ interface ApiResponse {
       dropdown_name?: string[];
       reg_name?: string[];
     };
+    dataidRows?: DataIdDropdownRow[];
     pagination?: {
       currentPage: number;
       totalPages: number;
@@ -69,189 +62,252 @@ interface ApiResponse {
       limit: number;
     };
   };
+  message?: string;
 }
 
 export default function DropdownMasterPage() {
   const hotTableRef = useRef<any>(null);
+
   const [data, setData] = useState<DataItem[]>([]);
+  const [columns, setColumns] = useState<ColumnSettings[]>([]);
+
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
-    status: [],
+    is_active: [],
     data_id: [],
+    dropdown_name: [],
+    reg_name: [],
   });
 
-  console.log('filter option ->>>>>>', filterOptions)
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
+  const [selectedRowData, setSelectedRowData] = useState<any>(null);
+
+  const [selectedDropdown, setSelectedDropdown] = useState('');
   const [selectedDataId, setSelectedDataId] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
-  const [selectedDropdown, setSelectedDropdown] = useState('');
+  const [selectedDropdownName, setSelectedDropdownName] = useState('');
+  const [registerName, setRegisterName] = useState('');
+  const [valueId, setValueId] = useState('');
+  const [englishValue, setEnglishValue] = useState('');
+  const [hindiValue, setHindiValue] = useState('');
+  const [emptyRowCount, setEmptyRowCount] = useState('1');
 
-  // Loading states for different actions
+  const [separateDataIdRows, setSeparateDataIdRows] = useState<DataIdDropdownRow[]>([]);
+
   const [loading, setLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [downloadLoading, setDownloadLoading] = useState(false);
   const [templateLoading, setTemplateLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
-  const [clearLoading, setClearLoading] = useState(false);
   const [insertLoading, setInsertLoading] = useState(false);
   const [showInsertModal, setShowInsertModal] = useState(false);
 
-  // Search input values
-  const [valueId, setValueId] = useState('');
-  const [englishValue, setEnglishValue] = useState('');
-  const [hindiValue, setHindiValue] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState<number | 'All'>(50);
+  const [itemsPerPage] = useState<number | 'All'>(50);
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  // const columns: ColumnSettings[] = [
-  //   { data: 'id', title: 'ID', width: 70, readOnly: true, className: 'htCenter' },
-  //   { data: 'data_id', title: 'Data ID', width: 90, className: 'htCenter' },
-  //   { data: 'data_id_name_hi', title: 'Data Name (HI)', width: 120, className: 'htLeft' },
-  //   { data: 'data_id_name_en', title: 'Data Name (EN)', width: 120, className: 'htLeft' },
-  //   { data: 'ac_no', title: 'AC No', width: 80, className: 'htCenter' },
-  //   { data: 'ac_name_hi', title: 'AC Name (HI)', width: 120, className: 'htLeft' },
-  //   { data: 'ac_name_en', title: 'AC Name (EN)', width: 120, className: 'htLeft' },
-  //   { data: 'pc_no', title: 'PC No', width: 80, className: 'htCenter' },
-  //   { data: 'pc_name_hi', title: 'PC Name (HI)', width: 120, className: 'htLeft' },
-  //   { data: 'pc_name_en', title: 'PC Name (EN)', width: 120, className: 'htLeft' },
-  //   { data: 'district_id', title: 'District ID', width: 100, className: 'htCenter' },
-  //   { data: 'district_hi', title: 'District (HI)', width: 120, className: 'htLeft' },
-  //   { data: 'district_en', title: 'District (EN)', width: 120, className: 'htLeft' },
-  //   { data: 'party_district_id', title: 'Party District ID', width: 120, className: 'htCenter' },
-  //   { data: 'party_district_hi', title: 'Party District (HI)', width: 120, className: 'htLeft' },
-  //   { data: 'party_district_en', title: 'Party District (EN)', width: 120, className: 'htLeft' },
-  //   { data: 'div_id', title: 'Div ID', width: 80, className: 'htCenter' },
-  //   { data: 'div_name_hi', title: 'Division (HI)', width: 140, className: 'htLeft' },
-  //   { data: 'div_name_en', title: 'Division (EN)', width: 140, className: 'htLeft' },
-  //   {
-  //     data: 'is_active',
-  //     title: 'Status',
-  //     width: 90,
-  //     className: 'htCenter',
-  //     renderer: (instance, td, row, col, prop, value) => {
-  //       td.textContent = value === 1 ? 'Active' : 'Inactive';
-  //       td.className = 'htCenter';
-  //       return td;
-  //     }
-  //   },
-  //   {
-  //     data: 'updated_at',
-  //     title: 'Updated',
-  //     width: 150,
-  //     className: 'htCenter',
-  //     renderer: (instance, td, row, col, prop, value) => {
-  //       if (value) {
-  //         td.textContent = new Date(value).toLocaleString();
-  //       } else {
-  //         td.textContent = '-';
-  //       }
-  //       return td;
-  //     }
-  //   }
-  // ];
 
-  const [columns, setColumns] = useState<ColumnSettings[]>([]);
+  const isYojnaMaster = selectedDropdown === 'eroll_yojna_master';
+  const isOtherMaster = selectedDropdown === 'eroll_dropdown';
+  const isCastMaster = selectedDropdown === 'eroll_castmaster';
+  const isImportMaster = selectedDropdown === 'dataid_importmaster';
 
-  const [formData, setFormData] = useState({
-    data_id: "",
-    data_id_name_en: "",
-    data_id_name_hi: "",
-    ac_no: "",
-    ac_name_en: "",
-    ac_name_hi: "",
-    pc_no: "",
-    pc_name_en: "",
-    pc_name_hi: "",
-    district_id: "",
-    district_en: "",
-    district_hi: "",
-    party_district_id: "",
-    party_district_en: "",
-    party_district_hi: "",
-    div_id: "",
-    div_name_en: "",
-    div_name_hi: "",
-    data_range: null,
-    is_active: 1
-  });
+  const [formData, setFormData] = useState<Record<string, any>>({});
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const isYojnaMaster = selectedDropdown === "eroll_yojna_master";
-  const isOtherMaster = selectedDropdown === "eroll_dropdown";
-  const isCastMaster = selectedDropdown === "eroll_castmaster";
-  const isImportMaster = selectedDropdown === "dataid_importmaster";
+  const dataIdDropdownOptions = (separateDataIdRows || []).map((item) => ({
+    value: String(item.data_id),
+    label: item.data_id_name_hi
+      ? `${item.data_id} - ${item.data_id_name_hi}`
+      : item.data_id_name_en
+        ? `${item.data_id} - ${item.data_id_name_en}`
+        : String(item.data_id)
+  }));
 
-  const [registerName, setRegisterName] = useState("");
-  const [dropdownName, setDropdownName] = useState("");
+  const tableFieldConfig: Record<
+    string,
+    {
+      title: string;
+      fields: {
+        name: string;
+        label: string;
+        type?: 'text' | 'number' | 'select' | 'date';
+        required?: boolean;
+        readonly?: boolean;
+      }[];
+    }
+  > = {
+    dataid_importmaster: {
+      title: 'Insert New Data ID Master',
+      fields: [
+        { name: 'data_id', label: 'Data ID', type: 'select', required: true },
+        { name: 'data_id_name_hi', label: 'Data ID Name (HI)' },
+        { name: 'data_id_name_en', label: 'Data ID Name (EN)' },
+        { name: 'ac_no', label: 'AC No', type: 'number' },
+        { name: 'ac_name_hi', label: 'AC Name HI' },
+        { name: 'ac_name_en', label: 'AC Name EN' },
+        { name: 'pc_no', label: 'PC No', type: 'number' },
+        { name: 'pc_name_hi', label: 'PC Name HI' },
+        { name: 'pc_name_en', label: 'PC Name EN' },
+        { name: 'district_id', label: 'District ID', type: 'number' },
+        { name: 'district_hi', label: 'District HI' },
+        { name: 'district_en', label: 'District EN' },
+        { name: 'party_district_id', label: 'Party District ID', type: 'number' },
+        { name: 'party_district_hi', label: 'Party District HI' },
+        { name: 'party_district_en', label: 'Party District EN' },
+        { name: 'div_id', label: 'Div ID', type: 'number' },
+        { name: 'div_name_hi', label: 'Div Name HI' },
+        { name: 'div_name_en', label: 'Div Name EN' },
+      ]
+    },
+
+    eroll_castmaster: {
+      title: 'Insert New Cast Master',
+      fields: [
+        { name: 'data_id', label: 'Data ID', type: 'select', required: true },
+        { name: 'rid', label: 'RID' },
+        { name: 'religion_en', label: 'Religion EN' },
+        { name: 'religion_hi', label: 'Religion HI' },
+        { name: 'catid', label: 'Cat ID' },
+        { name: 'castcat_en', label: 'Cast Category EN' },
+        { name: 'castcat_hi', label: 'Cast Category HI' },
+        { name: 'castid', label: 'Cast ID' },
+        { name: 'castida_en', label: 'Cast Name EN' },
+        { name: 'castida_hi', label: 'Cast Name HI' },
+      ]
+    },
+
+    eroll_dropdown: {
+      title: 'Insert New Dropdown Master',
+      fields: [
+        { name: 'data_id', label: 'Data ID', type: 'select', required: true },
+        { name: 'dropdown_id', label: 'Dropdown ID', type: 'number' },
+        { name: 'dropdown_name', label: 'Dropdown Name' },
+        { name: 'value_hi', label: 'Value HI' },
+        { name: 'value_en', label: 'Value EN' },
+        { name: 'value_id', label: 'Value ID' },
+      ]
+    },
+
+    eroll_yojna_master: {
+      title: 'Insert New Yojna Master',
+      fields: [
+        { name: 'data_id', label: 'Data ID', type: 'select', required: true },
+        { name: 'yojna_id', label: 'Yojna ID', type: 'number' },
+        { name: 'yojna_name', label: 'Yojna Name' },
+        { name: 'regid', label: 'Register ID', type: 'number' },
+        { name: 'reg_name', label: 'Register Name' },
+        { name: 'is_active', label: 'Status', type: 'number' },
+        { name: 'updated_at', label: 'Updated At', type: 'date' },
+      ]
+    }
+  };
+
+  const getInitialFormData = (tableName: string) => {
+    const config = tableFieldConfig[tableName];
+    if (!config) return {};
+
+    const initial: Record<string, any> = {};
+
+    config.fields.forEach((field) => {
+      if (field.name === 'is_active') {
+        initial[field.name] = 1;
+      } else {
+        initial[field.name] = '';
+      }
+    });
+
+    return initial;
+  };
 
   useEffect(() => {
-    setSelectedDataId("");
-    setSelectedStatus("");
-    setRegisterName("");
-    setDropdownName("");
-    setHindiValue("");
+    setSelectedDataId('');
+    setSelectedStatus('');
+    setRegisterName('');
+    setSelectedDropdownName('');
+    setHindiValue('');
+    setEnglishValue('');
+    setValueId('');
+    setData([]);
+    setColumns([]);
+    setSeparateDataIdRows([]);
+    setCurrentPage(1);
+    setShowInsertModal(false);
+    setSelectedRowIndex(null);
+    setSelectedRowData(null);
+    setFormData(getInitialFormData(selectedDropdown));
   }, [selectedDropdown]);
 
+  useEffect(() => {
+    if (showInsertModal && selectedDropdown) {
+      setFormData((prev) => ({
+        ...getInitialFormData(selectedDropdown),
+        ...prev,
+        data_id: selectedDataId || prev?.data_id || ''
+      }));
+    }
+  }, [showInsertModal, selectedDropdown, selectedDataId]);
 
   const fetchData = async (page?: number, limit?: number | 'All') => {
     if (!selectedDropdown) {
-      alert('Please select a dropdown master');
+      setData([]);
+      setColumns([]);
       return;
     }
 
     setLoading(true);
+
     try {
       const params: any = {
         table: selectedDropdown,
         page: page !== undefined ? page : currentPage,
-        limit: limit !== undefined ? (limit === 'All' ? 1000 : limit) : (itemsPerPage === 'All' ? 1000 : itemsPerPage),
+        limit:
+          limit !== undefined
+            ? (limit === 'All' ? 1000 : limit)
+            : (itemsPerPage === 'All' ? 1000 : itemsPerPage),
       };
 
       if (selectedDataId) params.data_id = selectedDataId;
       if (selectedStatus) params.status = selectedStatus;
-      if (dropdownName) params.dropdown_name = dropdownName;   // ✅ ADD HERE
-      if (registerName) params.reg_name = registerName;        // ✅ ADD HERE
-
+      if (selectedDropdownName) params.dropdown_name = selectedDropdownName;
+      if (registerName) params.reg_name = registerName;
       if (valueId) params.value_id = valueId;
       if (englishValue) params.search = englishValue;
       if (hindiValue) params.search = hindiValue;
 
       const response = await dataidImportMasterTable(params) as ApiResponse;
 
-      // console.log('respon ->>>>> ', response)
-
       if (response.success && response.data) {
         const result = response.data.result || [];
-
         setData(result);
+        setSelectedRowIndex(null);
+        setSelectedRowData(null);
+        setSeparateDataIdRows(response?.data?.dataidRows || []);
 
         if (result.length > 0) {
-
           const dynamicColumns: ColumnSettings[] = Object.keys(result[0]).map((key) => {
-
-            // custom renderers
-            if (key === "is_active") {
+            if (key === 'is_active') {
               return {
                 data: key,
-                title: "Status",
+                title: 'Status',
                 width: 90,
-                className: "htCenter",
-                renderer: (instance, td, row, col, prop, value) => {
-                  td.textContent = value === 1 ? "Active" : "Inactive";
-                  td.className = "htCenter";
+                className: 'htCenter',
+                renderer: (_instance, td, _row, _col, _prop, value) => {
+                  td.textContent = Number(value) === 1 ? 'Active' : 'Inactive';
+                  td.className = 'htCenter htMiddle';
                   return td;
                 }
               };
             }
 
-            if (key === "updated_at") {
+            if (key === 'updated_at') {
               return {
                 data: key,
-                title: "Updated",
+                title: 'Updated',
                 width: 150,
-                className: "htCenter",
-                renderer: (instance, td, row, col, prop, value) => {
-                  td.textContent = value
-                    ? new Date(value).toLocaleString()
-                    : "-";
+                className: 'htCenter',
+                renderer: (_instance, td, _row, _col, _prop, value) => {
+                  td.textContent = value ? new Date(value).toLocaleString() : '-';
+                  td.className = 'htCenter htMiddle';
                   return td;
                 }
               };
@@ -259,13 +315,15 @@ export default function DropdownMasterPage() {
 
             return {
               data: key,
-              title: key.replace(/_/g, " ").toUpperCase(),
+              title: key.replace(/_/g, ' ').toUpperCase(),
               width: 120,
-              className: "htLeft"
+              className: 'htCenter htMiddle'
             };
           });
 
           setColumns(dynamicColumns);
+        } else {
+          setColumns([]);
         }
 
         setFilterOptions(response.data.filters || {
@@ -279,57 +337,80 @@ export default function DropdownMasterPage() {
           setCurrentPage(response.data.pagination.currentPage);
           setTotalPages(response.data.pagination.totalPages);
           setTotalRecords(response.data.pagination.totalRecords);
-          setItemsPerPage(response.data.pagination.limit === 1000 ? "All" : response.data.pagination.limit);
         }
+      } else {
+        setData([]);
+        setColumns([]);
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Fetch data error:', error);
+      setData([]);
+      setColumns([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGoClick = () => {
-    setCurrentPage(1);
-    fetchData(1, itemsPerPage);
-  };
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (selectedDropdown) {
+        fetchData(1, itemsPerPage);
+      }
+    }, 300);
 
-  const handleApplyFilters = () => {
-    setCurrentPage(1);
-    fetchData(1, itemsPerPage);
-  };
+    return () => clearTimeout(timer);
+  }, [
+    selectedDropdown,
+    selectedDataId,
+    selectedStatus,
+    selectedDropdownName,
+    registerName,
+    valueId,
+    englishValue,
+    hindiValue
+  ]);
 
   const handleDelete = async () => {
+    console.log("vdsfvds", selectedDropdown)
     if (!selectedDropdown) {
       alert('Please select a dropdown master first');
       return;
     }
-    setDeleteLoading(true);
-    try {
-      const params: any = {
-        table: selectedDropdown,
-        action: 'delete',
-        page: 1,
-        limit: itemsPerPage === 'All' ? 1000 : itemsPerPage,
-      };
-      if (selectedDataId) params.data_id = selectedDataId;
-      if (selectedStatus) params.status = selectedStatus;
-      if (valueId) params.value_id = valueId;
-      params.search = englishValue || hindiValue;
+    if (!selectedRowData) {
+      alert('Please select a row first 2');
+      return;
+    }
 
-      const response = await dataidImportMasterTable(params) as ApiResponse;
-      if (response.success && response.data) {
-        setData(response.data.result || []);
-        setFilterOptions(response.data.filters || { status: [], data_id: [] });
-        if (response.data.pagination) {
-          setCurrentPage(response.data.pagination.currentPage);
-          setTotalPages(response.data.pagination.totalPages);
-          setTotalRecords(response.data.pagination.totalRecords);
-        }
-        alert('Delete operation completed successfully');
+    if (!selectedRowData.id || !selectedRowData.data_id) {
+      alert('Selected row is missing id or data_id');
+      return;
+    }
+
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete row ID ${selectedRowData.id}?`
+    );
+
+    if (!confirmDelete) return;
+
+    setDeleteLoading(true);
+
+    try {
+      const response = await deleteMasterRowApi({
+        table: selectedDropdown,
+        id: Number(selectedRowData.id),
+        data_id: selectedRowData.data_id
+      });
+
+      if (response.success) {
+        alert(response.message || 'Row deleted successfully');
+        setSelectedRowIndex(null);
+        setSelectedRowData(null);
+        fetchData(currentPage, itemsPerPage);
+      } else {
+        alert(response.message || 'Delete failed');
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Delete error:', error);
       alert('Error during delete operation');
     } finally {
       setDeleteLoading(false);
@@ -343,194 +424,209 @@ export default function DropdownMasterPage() {
     }
 
     setDownloadLoading(true);
+
     try {
-      const params: any = {
+      const filters: any = {
         table: selectedDropdown,
-        action: 'download'
       };
 
-      if (selectedDataId) params.data_id = selectedDataId;
-      if (selectedStatus) params.status = selectedStatus;
-      if (valueId) params.value_id = valueId;
-      if (englishValue) params.search = englishValue;
-      if (hindiValue) params.search = hindiValue;
+      if (selectedDataId) filters.data_id = selectedDataId;
+      if (selectedStatus) filters.is_active = selectedStatus;
+      if (selectedDropdownName) filters.dropdown_name = selectedDropdownName;
+      if (registerName) filters.reg_name = registerName;
+      if (valueId) filters.value_id = valueId;
+      if (englishValue) filters.search = englishValue;
+      if (hindiValue) filters.search = hindiValue;
 
-      const response = await dataidImportMasterTable(params) as ApiResponse;
+      const res = await downloadMasterExcelApi(filters);
 
-      if (response.success && response.data) {
-        setData(response.data.result || []);
-        setFilterOptions(response.data.filters || { status: [], data_id: [] });
-        alert('Download operation completed successfully');
+      if (!res.success) {
+        alert(res.message || 'Download failed');
       }
     } catch (error) {
-      console.error('Error:', error);
-      alert('Error during download operation');
+      console.error('Download error:', error);
+      alert('Error downloading file');
     } finally {
       setDownloadLoading(false);
     }
   };
 
-  const handleTemplate = async () => {
+  const handleSave = async () => {
     if (!selectedDropdown) {
       alert('Please select a dropdown master first');
       return;
     }
 
+    if (!selectedRowData) {
+      alert('Please select a row first');
+      return;
+    }
+
+    if (!selectedRowData.id || !selectedRowData.data_id) {
+      alert('Selected row is missing id or data_id');
+      return;
+    }
+
     setTemplateLoading(true);
+
     try {
-      const params: any = {
+      const updates = { ...selectedRowData };
+      delete updates.id;
+
+      const response = await saveMasterPatchApi({
         table: selectedDropdown,
-        action: 'template'
-      };
+        id: Number(selectedRowData.id),
+        data_id: selectedRowData.data_id,
+        updates
+      });
 
-      if (selectedDataId) params.data_id = selectedDataId;
-      if (selectedStatus) params.status = selectedStatus;
-      if (valueId) params.value_id = valueId;
-      if (englishValue) params.search = englishValue;
-      if (hindiValue) params.search = hindiValue;
-
-      const response = await dataidImportMasterTable(params) as ApiResponse;
-
-      if (response.success && response.data) {
-        setData(response.data.result || []);
-        setFilterOptions(response.data.filters || { status: [], data_id: [] });
-        alert('Template operation completed successfully');
+      if (response.success) {
+        alert(response.message || 'Row saved successfully');
+        fetchData(currentPage, itemsPerPage);
+      } else {
+        alert(response.message || 'Save failed');
       }
     } catch (error) {
-      console.error('Error:', error);
-      alert('Error during template operation');
+      console.error('Save patch error:', error);
+      alert('Error while saving row');
     } finally {
       setTemplateLoading(false);
     }
   };
 
-  const handleImport = async () => {
+  const handleImport = async (e?: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e?.target?.files?.[0];
+
     if (!selectedDropdown) {
       alert('Please select a dropdown master first');
+      return;
+    }
+
+    if (!file) {
+      alert('Please select a CSV file');
+      return;
+    }
+
+    const confirmImport = window.confirm(
+      `This will override existing data in ${selectedDropdown} for the imported data scope. Continue?`
+    );
+
+    if (!confirmImport) {
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
     setImportLoading(true);
+
     try {
-      const params: any = {
+      const response = await importMasterCsvApi({
         table: selectedDropdown,
-        action: 'import'
-      };
+        file
+      });
 
-      if (selectedDataId) params.data_id = selectedDataId;
-      if (selectedStatus) params.status = selectedStatus;
-      if (valueId) params.value_id = valueId;
-      if (englishValue) params.search = englishValue;
-      if (hindiValue) params.search = hindiValue;
-
-      const response = await dataidImportMasterTable(params) as ApiResponse;
-
-      if (response.success && response.data) {
-        setData(response.data.result || []);
-        setFilterOptions(response.data.filters || { status: [], data_id: [] });
-        alert('Import operation completed successfully');
+      if (response.success) {
+        alert(response.message || 'Import completed successfully');
+        fetchData(currentPage, itemsPerPage);
+      } else {
+        alert(response.message || 'Import failed');
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Import error:', error);
       alert('Error during import operation');
     } finally {
       setImportLoading(false);
-    }
-  };
-
-  const handleClear = async () => {
-    if (!selectedDropdown) {
-      alert('Please select a dropdown master first');
-      return;
-    }
-
-    setClearLoading(true);
-    try {
-      const params: any = {
-        table: selectedDropdown,
-        action: 'clear'
-      };
-
-      if (selectedDataId) params.data_id = selectedDataId;
-      if (selectedStatus) params.status = selectedStatus;
-      if (valueId) params.value_id = valueId;
-      if (englishValue) params.search = englishValue;
-      if (hindiValue) params.search = hindiValue;
-
-      const response = await dataidImportMasterTable(params) as ApiResponse;
-
-      if (response.success && response.data) {
-        setData(response.data.result || []);
-        setFilterOptions(response.data.filters || { status: [], data_id: [] });
-        alert('Clear operation completed successfully');
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Error during clear operation');
-    } finally {
-      setClearLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
   const handleInsertRow = async () => {
+    if (!selectedDropdown) {
+      alert('Please select table first');
+      return;
+    }
+
     if (!formData.data_id) {
-      alert("Data ID is required");
+      alert('Data ID is required');
       return;
     }
 
     setInsertLoading(true);
 
     try {
-      const payload = {
-        table: selectedDropdown,
-        ...formData,
-        data_id: Number(formData.data_id),
-        ac_no: Number(formData.ac_no || 0),
-        pc_no: Number(formData.pc_no || 0),
-        district_id: Number(formData.district_id || 0),
-        party_district_id: Number(formData.party_district_id || 0),
-        div_id: Number(formData.div_id || 0),
-        is_active: 1
+      const config = tableFieldConfig[selectedDropdown];
+      const payload: Record<string, any> = {
+        table: selectedDropdown
       };
+
+      config.fields.forEach((field) => {
+        let value = formData[field.name];
+
+        if (field.type === 'number' && value !== '') {
+          value = Number(value);
+        }
+
+        payload[field.name] = value === '' ? null : value;
+      });
 
       const response = await addRowInDataIdImportMaster(payload);
 
       if (response.success) {
-        alert("Row inserted successfully");
-
+        alert('Row inserted successfully');
         setShowInsertModal(false);
-
-        // Reset form
-        setFormData({
-          data_id: "",
-          data_id_name_en: "",
-          data_id_name_hi: "",
-          ac_no: "",
-          ac_name_en: "",
-          ac_name_hi: "",
-          pc_no: "",
-          pc_name_en: "",
-          pc_name_hi: "",
-          district_id: "",
-          district_en: "",
-          district_hi: "",
-          party_district_id: "",
-          party_district_en: "",
-          party_district_hi: "",
-          div_id: "",
-          div_name_en: "",
-          div_name_hi: "",
-          data_range: null,
-          is_active: 1
-        });
-
+        setFormData(getInitialFormData(selectedDropdown));
         fetchData(currentPage, itemsPerPage);
       } else {
-        alert(response.message || "Insert failed");
+        alert(response.message || 'Insert failed');
       }
     } catch (error) {
-      console.error("Insert error:", error);
-      alert("Error inserting row");
+      console.error('Insert error:', error);
+      alert('Error inserting row');
+    } finally {
+      setInsertLoading(false);
+    }
+  };
+
+  const handleAddEmptyRow = async () => {
+    if (!selectedDropdown) {
+      alert('Please select a table first');
+      return;
+    }
+
+    if (!selectedDataId) {
+      alert('Please select a Data ID first');
+      return;
+    }
+
+    const count = Number(emptyRowCount);
+
+    if (!count || Number.isNaN(count) || count < 1) {
+      alert('Please enter valid row count');
+      return;
+    }
+
+    if (count > 100) {
+      alert('Only 100 rows are allowed');
+      return;
+    }
+
+    try {
+      setInsertLoading(true);
+
+      const res = await addEmptyRowsApi(
+        selectedDropdown,
+        Number(selectedDataId),
+        count
+      );
+
+      if (res.success) {
+        alert(res.message || 'Empty row(s) created successfully');
+        fetchData(currentPage, itemsPerPage);
+      } else {
+        alert(res.message || 'Insert failed');
+      }
+    } catch (error) {
+      console.error('Add empty row error:', error);
+      alert('Error creating row');
     } finally {
       setInsertLoading(false);
     }
@@ -542,7 +638,6 @@ export default function DropdownMasterPage() {
     downloadLoading ||
     templateLoading ||
     importLoading ||
-    clearLoading ||
     insertLoading;
 
   return (
@@ -555,9 +650,9 @@ export default function DropdownMasterPage() {
         </div>
       </div>
 
-      <div className="">
+      <div>
         <div className="bg-white border rounded-lg px-4">
-          <div className="flex items-end gap-3 pb-2 pt-0">
+          <div className="flex items-end gap-3 pb-2 pt-0 flex-wrap">
             <div className="w-[200px]">
               <select
                 className="w-full mt-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-700"
@@ -573,7 +668,7 @@ export default function DropdownMasterPage() {
               </select>
             </div>
 
-            <div className="w-[110px]">
+            <div className="w-[140px]">
               <select
                 className="w-full mt-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-700"
                 value={selectedDataId}
@@ -581,23 +676,26 @@ export default function DropdownMasterPage() {
                 disabled={isAnyActionLoading}
               >
                 <option value="">All</option>
-                {filterOptions.data_id?.map((id) => (
-                  <option key={id} value={id}>{id}</option>
+                {dataIdDropdownOptions.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
                 ))}
               </select>
             </div>
 
-
             {isOtherMaster && (
               <div className="w-[200px]">
                 <select
-                  value={dropdownName}
-                  onChange={(e) => setDropdownName(e.target.value)}
+                  value={selectedDropdownName}
+                  onChange={(e) => setSelectedDropdownName(e.target.value)}
                   className="w-full text-black mt-1 border border-gray-300 rounded-md px-3 py-2 text-sm"
                 >
                   <option value="">Dropdown Name</option>
                   {filterOptions.dropdown_name?.map((name) => (
-                    <option key={name} value={name}>{name}</option>
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -612,7 +710,9 @@ export default function DropdownMasterPage() {
                 >
                   <option value="">Register Name</option>
                   {filterOptions.reg_name?.map((name) => (
-                    <option key={name} value={name}>{name}</option>
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -629,14 +729,14 @@ export default function DropdownMasterPage() {
                   <option value="">All</option>
                   {filterOptions.is_active?.map((status) => (
                     <option key={status} value={status}>
-                      {status === 1 ? 'Active' : 'Inactive'}
+                      {Number(status) === 1 ? 'Active' : 'Inactive'}
                     </option>
                   ))}
                 </select>
               </div>
             )}
 
-            <div className="w-[600px]">
+            <div className="w-[280px]">
               <input
                 placeholder="Search"
                 value={hindiValue}
@@ -646,111 +746,115 @@ export default function DropdownMasterPage() {
               />
             </div>
 
-            <div className="flex items-center gap-2 ml-auto">
-              <div className="pt-1 flex gap-2">
-                {/* GO Button */}
+            {selectedDataId && (
+              <div className="flex gap-2 items-center">
+                <input
+                  placeholder="Count"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={emptyRowCount}
+                  onChange={(e) => setEmptyRowCount(e.target.value)}
+                  className="h-8 w-20 rounded text-black px-2 border border-black"
+                  disabled={isAnyActionLoading}
+                />
                 <button
-                  onClick={handleGoClick}
-                  disabled={isAnyActionLoading || !selectedDropdown}
-                  className="h-8 min-w-[40px] px-3 flex items-center justify-center gap-2 rounded-md text-white bg-gray-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
+                  onClick={handleAddEmptyRow}
+                  disabled={isAnyActionLoading || !selectedDropdown || !selectedDataId}
+                  className="h-8 min-w-[90px] px-3 flex items-center justify-center gap-2 rounded-md text-white bg-gray-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
                 >
-                  {loading ? (
+                  {insertLoading ? (
                     <>
                       <Loader2 size={16} className="animate-spin" />
-                      <span>Loading...</span>
+                      <span>Adding...</span>
                     </>
                   ) : (
-                    "GO"
+                    'ADD ROW'
                   )}
                 </button>
-
-                {/* INSERT ROW Button */}
-                {!isImportMaster && (
-                  <button
-                    onClick={() => setShowInsertModal(true)}
-                    disabled={isAnyActionLoading || !selectedDropdown}
-                    className="h-8 min-w-[40px] px-4 flex items-center justify-center rounded-md text-white bg-gray-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
-                  >
-                    {insertLoading ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <span className="text-lg leading-none">+</span>
-                    )}
-                  </button>
-                )}
               </div>
+            )}
 
-              {/* Apply Filters
+            {!isImportMaster && (
               <button
-                onClick={handleApplyFilters}
+                onClick={() => setShowInsertModal(true)}
                 disabled={isAnyActionLoading || !selectedDropdown}
-                className="h-10 w-10 flex items-center justify-center rounded-md border border-gray-300 text-black bg-white hover:bg-gray-100 disabled:bg-gray-200 disabled:cursor-not-allowed"
+                className="h-8 min-w-[40px] px-4 flex items-center justify-center rounded-md text-white bg-gray-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
               >
-                {loading ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Play size={16} />
-                )}
-              </button> */}
+                <span className="text-lg leading-none">+</span>
+              </button>
+            )}
 
-              {/* Delete */}
-              {!isImportMaster && (
-                <button
-                  onClick={handleDelete}
-                  disabled={isAnyActionLoading || !selectedDropdown}
-                  className="h-8 w-10 flex items-center justify-center rounded-md text-white bg-gray-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
-                >
-                  {deleteLoading ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <Trash2 size={14} />
-                  )}
-                </button>
-              )}
-
-              {/* Download */}
+            {!isImportMaster && (
               <button
-                onClick={handleDownload}
-                disabled={isAnyActionLoading || !selectedDropdown}
+                onClick={handleDelete}
+                // disabled={isAnyActionLoading || !selectedDropdown || !selectedRowData}
                 className="h-8 w-10 flex items-center justify-center rounded-md text-white bg-gray-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
+                title={selectedRowData ? 'Delete selected row' : 'Select a row first'}
               >
-                {downloadLoading ? (
+                {deleteLoading ? (
                   <Loader2 size={14} className="animate-spin" />
                 ) : (
-                  <Download size={14} />
+                  <Trash2 size={14} />
                 )}
               </button>
+            )}
 
-              {/* Template */}
+            <button
+              onClick={handleDownload}
+              disabled={isAnyActionLoading || !selectedDropdown}
+              className="h-8 w-10 flex items-center justify-center rounded-md text-white bg-gray-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
+            >
+              {downloadLoading ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Download size={14} />
+              )}
+            </button>
+
+            <button
+              onClick={handleSave}
+              disabled={isAnyActionLoading || !selectedDropdown}
+              className="h-8 w-10 flex items-center justify-center rounded-md text-white bg-gray-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
+            >
+              {templateLoading ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <FileText size={14} />
+              )}
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleImport}
+            />
+
+            {!isImportMaster && (
               <button
-                onClick={handleTemplate}
+                onClick={() => fileInputRef.current?.click()}
                 disabled={isAnyActionLoading || !selectedDropdown}
                 className="h-8 w-10 flex items-center justify-center rounded-md text-white bg-gray-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
+                title="Import CSV and override existing data"
               >
-                {templateLoading ? (
+                {importLoading ? (
                   <Loader2 size={14} className="animate-spin" />
                 ) : (
-                  <FileText size={14} />
+                  <Upload size={14} />
                 )}
               </button>
-
-              {/* Import */}
-              {!isImportMaster && (
-                <button
-                  onClick={handleImport}
-                  disabled={isAnyActionLoading || !selectedDropdown}
-                  className="h-8 w-10 flex items-center justify-center rounded-md text-white bg-gray-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
-                >
-                  {importLoading ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <Upload size={14} />
-                  )}
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
+
+        {selectedRowData && (
+          <div className="mt-2 px-1 text-sm text-gray-600">
+            Selected Row: <span className="font-medium">ID {selectedRowData.id}</span>
+            {' '}| Data ID: <span className="font-medium">{selectedRowData.data_id}</span>
+          </div>
+        )}
 
         {loading ? (
           <div className="mt-4 border rounded-lg p-8 flex items-center justify-center">
@@ -765,135 +869,42 @@ export default function DropdownMasterPage() {
               ref={hotTableRef}
               data={data}
               columns={columns}
-              colHeaders={columns.map(col => col.title)}
+              colHeaders={true}
               rowHeaders={true}
               width="100%"
-              height="calc(100vh - 120px)"
-              stretchH="all" // Ensures columns fill the container width
-              autoColumnSize={true}
+              height={data.length === 0 ? 100 : Math.min(data.length * 42 + 50, 590)}
+              licenseKey="non-commercial-and-evaluation"
+              stretchH="all"
               manualColumnResize={true}
-              manualRowResize={true}
-              filters={false}
-              dropdownMenu={false}
-              contextMenu={true}
               columnSorting={true}
-              search={true}
-              comments={true}
-              fillHandle={true}
+              contextMenu={false}
+              copyPaste={true}
+              outsideClickDeselects={false}
               autoWrapRow={true}
               autoWrapCol={true}
-              rowHeights={35}
               wordWrap={false}
-              className="custom-hot"
-              licenseKey="non-commercial-and-evaluation"
+              selectionMode="range"
+              currentRowClassName="currentRow"
+              currentColClassName="currentCol"
+              afterSelection={(row) => {
+                const hot = hotTableRef.current?.hotInstance;
+                if (!hot) return;
+
+                const physicalRow = hot.toPhysicalRow(row);
+                console.log("pysix", physicalRow)
+                if (
+                  physicalRow !== null &&
+                  physicalRow !== undefined &&
+                  physicalRow >= 0 &&
+                  data[physicalRow]
+                ) {
+                  setSelectedRowIndex(physicalRow);
+                  setSelectedRowData(data[physicalRow]);
+                }
+              }}
+              afterDeselect={() => { }}
+              className="htCenter htMiddle"
             />
-            {/* {data.length > 0 && (
-              <div className="bg-white border-t mt-7 px-4 py-1 flex items-center justify-between text-sm text-gray-600">
-                <span>
-                  {loading ? "Loading..." : `Page ${currentPage} of ${totalPages} · Showing ${((currentPage - 1) * (itemsPerPage === 'All' ? totalRecords : itemsPerPage)) + 1} to ${Math.min(currentPage * (itemsPerPage === 'All' ? totalRecords : itemsPerPage), totalRecords)} entries of ${totalRecords}`}
-                </span>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      const newPage = currentPage - 1;
-                      setCurrentPage(newPage);
-                      fetchData(newPage, itemsPerPage);
-                    }}
-                    disabled={currentPage === 1 || loading}
-                    className={`px-3 py-1 border rounded-md flex items-center ${currentPage === 1 || loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'
-                      }`}
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-
-                  {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 7) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 4) {
-                      if (i < 5) pageNum = i + 1;
-                      else if (i === 5) return <span key="ellipsis1" className="px-2 py-1">...</span>;
-                      else pageNum = totalPages;
-                    } else if (currentPage >= totalPages - 3) {
-                      if (i === 0) pageNum = 1;
-                      else if (i === 1) return <span key="ellipsis2" className="px-2 py-1">...</span>;
-                      else pageNum = totalPages - (6 - i);
-                    } else {
-                      if (i === 0) pageNum = 1;
-                      else if (i === 1) return <span key="ellipsis3" className="px-2 py-1">...</span>;
-                      else if (i >= 2 && i <= 4) pageNum = currentPage - 2 + i;
-                      else if (i === 5) return <span key="ellipsis4" className="px-2 py-1">...</span>;
-                      else pageNum = totalPages;
-                    }
-
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => {
-                          setCurrentPage(pageNum);
-                          fetchData(pageNum, itemsPerPage);
-                        }}
-                        disabled={loading}
-                        className={`px-3 py-1 rounded-md ${currentPage === pageNum ? 'bg-gray-600 text-white' : 'border hover:bg-gray-50'
-                          } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-
-                  <button
-                    onClick={() => {
-                      const newPage = currentPage + 1;
-                      setCurrentPage(newPage);
-                      fetchData(newPage, itemsPerPage);
-                    }}
-                    disabled={currentPage === totalPages || loading}
-                    className={`px-3 py-1 border rounded-md flex items-center ${currentPage === totalPages || loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'
-                      }`}
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-
-                  <span className="ml-3">Go to:</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max={totalPages}
-                    value={currentPage}
-                    onChange={(e) => {
-                      const page = parseInt(e.target.value);
-                      if (page >= 1 && page <= totalPages && !loading) {
-                        setCurrentPage(page);
-                        fetchData(page, itemsPerPage);
-                      }
-                    }}
-                    className="w-16 border rounded-md px-2 py-1 text-gray-700 bg-gray-50 text-center"
-                    disabled={loading}
-                  />
-
-                  <span>Show:</span>
-                  <select
-                    value={itemsPerPage}
-                    onChange={(e) => {
-                      const value = e.target.value === 'All' ? 'All' : Number(e.target.value);
-                      setItemsPerPage(value);
-                      setCurrentPage(1);
-                      fetchData(1, value);
-                    }}
-                    className="border rounded-md px-2 py-1 text-gray-700 bg-gray-50"
-                    disabled={loading}
-                  >
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                    <option value="All">All</option>
-                  </select>
-                </div>
-              </div>
-            )} */}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-[calc(100vh-260px)] text-center">
@@ -904,124 +915,65 @@ export default function DropdownMasterPage() {
             <p className="text-sm text-gray-500 mt-1">
               Please select a Data ID from the filter above to view data
             </p>
+            {selectedDropdown && !loading && (
+              <p className="text-xs text-gray-400 mt-2">
+                Total Records: {totalRecords} | Total Pages: {totalPages}
+              </p>
+            )}
           </div>
         )}
       </div>
 
-      {showInsertModal && (
+      {showInsertModal && selectedDropdown && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
-          <div className="bg-white text-gray-800 rounded-xl p-6 w-[900px] shadow-2xl border">
-
+          <div className="bg-white text-gray-800 rounded-xl p-6 w-[1000px] max-h-[90vh] overflow-y-auto shadow-2xl border">
             <h2 className="text-lg font-semibold mb-5 border-b pb-3 text-gray-700">
-              Insert New Data ID Master
+              {tableFieldConfig[selectedDropdown]?.title || 'Insert Row'}
             </h2>
 
-            {/* SECTION 1 */}
             <div className="grid grid-cols-2 gap-4 mb-5">
-              <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">
-                  Data ID *
-                </label>
-                <input
-                  type="number"
-                  value={formData.data_id}
-                  onChange={(e) =>
-                    setFormData({ ...formData, data_id: e.target.value })
-                  }
-                  className="compact-input"
-                />
-              </div>
+              {tableFieldConfig[selectedDropdown]?.fields.map((field) => (
+                <div key={field.name}>
+                  <label className="text-xs font-semibold text-gray-600 mb-1 block">
+                    {field.label} {field.required ? '*' : ''}
+                  </label>
 
-              <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">
-                  Data ID Name (EN)
-                </label>
-                <input
-                  type="text"
-                  value={formData.data_id_name_en}
-                  onChange={(e) =>
-                    setFormData({ ...formData, data_id_name_en: e.target.value })
-                  }
-                  className="compact-input"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">
-                  Data ID Name (HI)
-                </label>
-                <input
-                  type="text"
-                  value={formData.data_id_name_hi}
-                  onChange={(e) =>
-                    setFormData({ ...formData, data_id_name_hi: e.target.value })
-                  }
-                  className="compact-input"
-                />
-              </div>
+                  {field.type === 'select' && field.name === 'data_id' ? (
+                    <select
+                      value={formData[field.name] ?? ''}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          [field.name]: e.target.value
+                        }))
+                      }
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    >
+                      <option value="">Select Data ID</option>
+                      {dataIdDropdownOptions.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={field.type || 'text'}
+                      value={formData[field.name] ?? ''}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          [field.name]: e.target.value
+                        }))
+                      }
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    />
+                  )}
+                </div>
+              ))}
             </div>
 
-            {/* AC + PC */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              <input
-                type="number"
-                placeholder="AC No"
-                value={formData.ac_no}
-                onChange={(e) =>
-                  setFormData({ ...formData, ac_no: e.target.value })
-                }
-                className="compact-input"
-              />
-
-              <input
-                placeholder="AC Name EN"
-                value={formData.ac_name_en}
-                onChange={(e) =>
-                  setFormData({ ...formData, ac_name_en: e.target.value })
-                }
-                className="compact-input"
-              />
-
-              <input
-                placeholder="AC Name HI"
-                value={formData.ac_name_hi}
-                onChange={(e) =>
-                  setFormData({ ...formData, ac_name_hi: e.target.value })
-                }
-                className="compact-input"
-              />
-
-              <input
-                type="number"
-                placeholder="PC No"
-                value={formData.pc_no}
-                onChange={(e) =>
-                  setFormData({ ...formData, pc_no: e.target.value })
-                }
-                className="compact-input"
-              />
-
-              <input
-                placeholder="PC Name EN"
-                value={formData.pc_name_en}
-                onChange={(e) =>
-                  setFormData({ ...formData, pc_name_en: e.target.value })
-                }
-                className="compact-input"
-              />
-
-              <input
-                placeholder="PC Name HI"
-                value={formData.pc_name_hi}
-                onChange={(e) =>
-                  setFormData({ ...formData, pc_name_hi: e.target.value })
-                }
-                className="compact-input"
-              />
-            </div>
-
-            {/* FOOTER */}
-            <div className="flex justify-end gap-3 border-t pt-4 ">
+            <div className="flex justify-end gap-3 border-t pt-4">
               <button
                 onClick={() => setShowInsertModal(false)}
                 className="px-4 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-100 transition"
@@ -1034,7 +986,7 @@ export default function DropdownMasterPage() {
                 disabled={insertLoading}
                 className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition shadow"
               >
-                {insertLoading ? "Inserting..." : "Insert"}
+                {insertLoading ? 'Inserting...' : 'Insert'}
               </button>
             </div>
           </div>

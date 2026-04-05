@@ -89,7 +89,8 @@ export const SearchableSelect: React.FC<Props> = ({
   };
 
   const handleSelect = (option: Option): void => {
-    onChange(String(option[valueKey]));
+    const val = (option as any)[valueKey];   // 👈 FIX
+    onChange(String(val));
     onDropdownToggle(null);
     setSearchTerm("");
   };
@@ -195,8 +196,8 @@ export const SearchableSelect: React.FC<Props> = ({
                     key={index}
                     onClick={() => handleSelect(option)}
                     className={`w-full px-3 py-2 text-left text-xs hover:bg-gray-100 ${String(option[valueKey]) === value || option.display === value
-                        ? "bg-gray-200 font-semibold"
-                        : ""
+                      ? "bg-gray-200 font-semibold"
+                      : ""
                       }`}
                     title={option.display}
                   >

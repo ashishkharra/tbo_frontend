@@ -1,180 +1,738 @@
 "use client";
 
-import { useEffect, useState, ChangeEvent, FormEvent } from "react";
-import { Mail, Lock, Eye, EyeOff } from "lucide-react";
-import { loginApi } from "../../apis/api";
+import { useMemo, useState, ChangeEvent, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Smartphone,
+  Lock,
+  ShieldCheck,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  KeyRound,
+} from "lucide-react";
 import useGuest from "../hook/useGuest";
-import { validatePhone } from "../../utils/helper";
-
-// Type Definitions
-interface LoginResponse {
-  success: boolean;
-  token?: string;
-  user?: UserData;
-  message?: string;
-}
+import {
+  initiateLoginApi,
+  verifyDeviceOtpApi,
+  verifyUserOtpApi,
+} from "../../apis/api";
+import { useAuth as useAuthContext } from "../../contexts/AuthContext";
 
 interface UserData {
   id?: number;
   username?: string;
   email?: string;
+  mobile_no?: string;
   role?: string;
+  role_id?: number;
+  permission_set_id?: number;
   [key: string]: any;
 }
 
-export default function LoginPage() {
-  const [contact_no, setContactNo] = useState<string>("");
-  const [password, setPassword] = useState<string>("");
-  const [error, setError] = useState<string>("");
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
+interface InitiateLoginResponse {
+  success: boolean;
+  message?: string;
+  data?: {
+    flow?: "SESSION_ACTIVE" | "DEVICE_OTP_SENT" | "USER_OTP_SENT" | "DIRECT_LOGIN";
+    otp_required?: boolean;
+    session_active?: boolean;
+    otp_type?: string;
+    masked_authenticated_mobile?: string;
+    masked_authenticated_email?: string;
+    otp_expires_at?: string;
+    otp_request_id?: number;
+    device_already_verified?: boolean;
+    user_already_verified?: boolean;
+    next_step?: "VERIFY_DEVICE_OTP" | "VERIFY_USER_OTP";
+    user?: UserData;
+    token?: string;
+    session_token?: string;
+  };
+}
 
-  const router = useRouter();
+interface VerifyDeviceOtpResponse {
+  success: boolean;
+  message?: string;
+  data?: {
+    flow?: "DIRECT_LOGIN" | "USER_OTP_SENT";
+    next_step?: "VERIFY_USER_OTP";
+    otp_type?: "USER_VERIFICATION_OTP";
+    otp_request_id?: number;
+    masked_authenticated_mobile?: string;
+    masked_authenticated_email?: string;
+    otp_expires_at?: string;
+    token?: string;
+    session_token?: string;
+    user?: UserData;
+  };
+}
+
+interface VerifyUserOtpResponse {
+  success: boolean;
+  message?: string;
+  data?: {
+    flow?: "DIRECT_LOGIN";
+    session_token?: string;
+    token?: string;
+    user?: UserData;
+    expires_at?: string;
+  };
+}
+
+type StepType = "LOGIN" | "DEVICE_OTP" | "USER_OTP";
+
+interface DevicePayload {
+  platform: "WEB";
+  generated_device_id: string;
+  device_id: string;
+  device_name: string;
+  device_type: string;
+  browser: string;
+  os: string;
+  ip_address: string;
+  user_agent: string;
+  login_access_requested: "web";
+}
+
+const MOBILE_REGEX = /^[6-9]\d{9}$/;
+
+const getBrowserName = () => {
+  if (typeof window === "undefined") return "Unknown Browser";
+  const ua = navigator.userAgent;
+
+  if (ua.includes("Edg")) return "Edge";
+  if (ua.includes("OPR") || ua.includes("Opera")) return "Opera";
+  if (ua.includes("Chrome")) return "Chrome";
+  if (ua.includes("Safari") && !ua.includes("Chrome")) return "Safari";
+  if (ua.includes("Firefox")) return "Firefox";
+
+  return "Unknown Browser";
+};
+
+const getOSName = () => {
+  if (typeof window === "undefined") return "Unknown OS";
+  const ua = navigator.userAgent;
+
+  if (ua.includes("Windows")) return "Windows";
+  if (ua.includes("Mac")) return "macOS";
+  if (ua.includes("Linux")) return "Linux";
+  if (ua.includes("Android")) return "Android";
+  if (ua.includes("iPhone") || ua.includes("iPad")) return "iOS";
+
+  return "Unknown OS";
+};
+
+const DEVICE_INSTALLATION_ID_KEY = "app_device_installation_id";
+
+const getOrCreateGeneratedDeviceId = () => {
+  if (typeof window === "undefined") return "web_unknown_device";
+
+  try {
+    const existing = localStorage.getItem(DEVICE_INSTALLATION_ID_KEY);
+    if (existing && String(existing).trim()) {
+      return String(existing).trim();
+    }
+
+    const newId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `dev_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+
+    localStorage.setItem(DEVICE_INSTALLATION_ID_KEY, newId);
+    return newId;
+  } catch (error) {
+    return `dev_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+  }
+};
+
+const getDevicePayload = (): DevicePayload => {
+  const browser = getBrowserName();
+  const os = getOSName();
+  const generatedDeviceId = getOrCreateGeneratedDeviceId();
+
+  return {
+    platform: "WEB",
+    generated_device_id: generatedDeviceId,
+    device_id: generatedDeviceId,
+    device_name: `${browser} on ${os}`,
+    device_type: "Desktop",
+    browser,
+    os,
+    ip_address: "",
+    user_agent: typeof window !== "undefined" ? navigator.userAgent : "",
+    login_access_requested: "web",
+  };
+};
+
+export default function LoginPage() {
   const checking = useGuest();
+  const router = useRouter();
+  const { refreshUser } = useAuthContext();
+
+  const [step, setStep] = useState<StepType>("LOGIN");
+
+  const [mobile, setMobile] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [deviceOtp, setDeviceOtp] = useState("");
+  const [userOtp, setUserOtp] = useState("");
+
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const [otpRequestId, setOtpRequestId] = useState<number | null>(null);
+  const [maskedAuthenticatedMobile, setMaskedAuthenticatedMobile] = useState("");
+  const [otpExpiresAt, setOtpExpiresAt] = useState("");
+  const [otpType, setOtpType] = useState("");
+  const [deviceAlreadyVerified, setDeviceAlreadyVerified] = useState(false);
+
+  const deviceInfo = useMemo(() => getDevicePayload(), []);
 
   if (checking) return null;
 
-  const handleMobileChange = (e: ChangeEvent<HTMLInputElement>): void => {
-    const value = e.target.value;
+  const validateMobile = (value: string) => MOBILE_REGEX.test(value.trim());
 
-    // sirf numbers allow
-    if (!/^\d*$/.test(value)) return;
-
-    // max 10 digits
-    if (value.length > 10) return;
-
-    setContactNo(value);
-  };
-
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
-    e.preventDefault();
-    
-    if (!validatePhone(contact_no)) {
-      setError("Please enter a valid 10-digit mobile number");
-      return;
+  const persistLogin = async (token?: string, user?: UserData) => {
+    if (typeof window !== "undefined" && token) {
+      localStorage.setItem("token", token);
+      localStorage.setItem("authToken", token);
+      localStorage.setItem("sessionToken", token);
+      localStorage.setItem("session_token", token);
     }
-    
-    setLoading(true);
-    setError("");
+
+    if (typeof window !== "undefined" && user) {
+      localStorage.setItem("userInfo", JSON.stringify(user));
+    }
 
     try {
-      const res = await loginApi({ contact_no, password }) as LoginResponse;
+      await refreshUser?.();
+    } catch (err) {
+      console.log("refreshUser error:", err);
+    }
 
-      if (!res.success) {
-        setError(res.message || "Login failed");
-        setLoading(false);
+    router.replace("/");
+    router.refresh();
+  };
+
+  const formatExpiryText = () => {
+    if (!otpExpiresAt) return "";
+    const date = new Date(otpExpiresAt);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString();
+  };
+
+  const resetOtpState = () => {
+    setDeviceOtp("");
+    setUserOtp("");
+    setOtpRequestId(null);
+    setMaskedAuthenticatedMobile("");
+    setOtpExpiresAt("");
+    setOtpType("");
+    setDeviceAlreadyVerified(false);
+  };
+
+  const handleLoginSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    const trimmedMobile = mobile.trim();
+    const trimmedPassword = password.trim();
+
+    if (!validateMobile(trimmedMobile)) {
+      setError("Please enter a valid 10-digit mobile number");
+      setSuccess("");
+      return;
+    }
+
+    if (!trimmedPassword) {
+      setError("Please enter password");
+      setSuccess("");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const res: any = (await initiateLoginApi({
+        mobile_no: trimmedMobile,
+        password: trimmedPassword,
+        ...deviceInfo,
+      })) as InitiateLoginResponse;
+
+      if (!res?.success) {
+        setError(res?.message || "Unable to login");
         return;
       }
 
-      console.log('req user ->>>>>>> ', res.user);
+      const flow = res?.data?.flow;
+      const token = res?.data?.token || res?.data?.session_token || "";
+      const user = res?.data?.user || null;
 
-      if (typeof window !== "undefined") {
-        console.log("Login successful, token:", res.token);
-        localStorage.setItem("token", res.token || "");
-        localStorage.setItem("userInfo", JSON.stringify(res.user || {}));
-        window.location.replace("/");
+      if (flow === "SESSION_ACTIVE" || flow === "DIRECT_LOGIN") {
+        setSuccess(
+          flow === "DIRECT_LOGIN"
+            ? "Login successful"
+            : "You are already logged in on this device"
+        );
+        await persistLogin(token, user);
+        console.log('direct login')
+        return;
       }
-    } catch (error) {
-      setError("An error occurred during login. Please try again.");
+
+      setOtpRequestId(res?.data?.otp_request_id || null);
+      setMaskedAuthenticatedMobile(
+        res?.data?.masked_authenticated_mobile ||
+        res?.data?.masked_authenticated_email ||
+        ""
+      );
+      setOtpExpiresAt(res?.data?.otp_expires_at || "");
+      setOtpType(res?.data?.otp_type || "");
+      setDeviceAlreadyVerified(!!res?.data?.device_already_verified);
+
+      if (flow === "DEVICE_OTP_SENT") {
+        setStep("DEVICE_OTP");
+        setSuccess("Device OTP sent successfully");
+      } else if (flow === "USER_OTP_SENT") {
+        setStep("USER_OTP");
+        setSuccess("User OTP sent successfully");
+      } else {
+        setError("Unexpected login flow response");
+      }
+    } catch (err) {
+      setError("Something went wrong while starting login");
+    } finally {
       setLoading(false);
     }
   };
 
+  const handleDeviceOtpSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    if (!deviceOtp.trim() || deviceOtp.trim().length !== 6) {
+      setError("Please enter a valid 6-digit device OTP");
+      setSuccess("");
+      return;
+    }
+
+    if (!otpRequestId) {
+      setError("Device OTP request not found. Please try again.");
+      setSuccess("");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const res: any = (await verifyDeviceOtpApi({
+        otp_request_id: otpRequestId,
+        mobile_no: mobile.trim(),
+        otp_code: deviceOtp.trim(),
+        ...deviceInfo,
+      })) as VerifyDeviceOtpResponse;
+
+      if (!res?.success) {
+        setError(res?.message || "Device OTP verification failed");
+        return;
+      }
+
+      const flow = res?.data?.flow;
+      const token = res?.data?.token || res?.data?.session_token || "";
+      const user = res?.data?.user || null;
+
+      if (flow === "DIRECT_LOGIN") {
+        setSuccess("Login successful");
+        await persistLogin(token, user);
+        return;
+      }
+
+      setOtpRequestId(res?.data?.otp_request_id || null);
+      setMaskedAuthenticatedMobile(
+        res?.data?.masked_authenticated_mobile ||
+        res?.data?.masked_authenticated_email ||
+        ""
+      );
+      setOtpExpiresAt(res?.data?.otp_expires_at || "");
+      setOtpType(res?.data?.otp_type || "USER_VERIFICATION_OTP");
+      setDeviceAlreadyVerified(true);
+      setDeviceOtp("");
+
+      if (flow === "USER_OTP_SENT") {
+        setStep("USER_OTP");
+        setSuccess("Device verified successfully. User OTP sent.");
+      } else {
+        setError("Unexpected device verification response");
+      }
+    } catch (err) {
+      setError("Something went wrong while verifying device OTP");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUserOtpSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    if (!userOtp.trim() || userOtp.trim().length !== 6) {
+      setError("Please enter a valid 6-digit user OTP");
+      setSuccess("");
+      return;
+    }
+
+    if (!otpRequestId) {
+      setError("User OTP request not found. Please try again.");
+      setSuccess("");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const res: any = (await verifyUserOtpApi({
+        otp_request_id: otpRequestId,
+        mobile_no: mobile.trim(),
+        otp_code: userOtp.trim(),
+        ...deviceInfo,
+      })) as VerifyUserOtpResponse;
+
+      if (!res?.success) {
+        setError(res?.message || "User OTP verification failed");
+        return;
+      }
+
+      setSuccess("Login successful");
+      await persistLogin(
+        res?.data?.token || res?.data?.session_token || "",
+        res?.data?.user || {}
+      );
+    } catch (err) {
+      setError("Something went wrong while verifying user OTP");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    const trimmedMobile = mobile.trim();
+    const trimmedPassword = password.trim();
+
+    if (!validateMobile(trimmedMobile)) {
+      setError("Please enter a valid mobile number first");
+      return;
+    }
+
+    if (!trimmedPassword) {
+      setError("Password is required");
+      return;
+    }
+
+    setResendLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const res = (await initiateLoginApi({
+        mobile_no: trimmedMobile,
+        password: trimmedPassword,
+        ...deviceInfo,
+      })) as InitiateLoginResponse;
+
+      if (!res?.success) {
+        setError(res?.message || "Unable to resend OTP");
+        return;
+      }
+
+      const flow = res?.data?.flow;
+
+      if (flow === "SESSION_ACTIVE" || flow === "DIRECT_LOGIN") {
+        await persistLogin(
+          res?.data?.token || res?.data?.session_token || "",
+          res?.data?.user || {}
+        );
+        return;
+      }
+
+      setOtpRequestId(res?.data?.otp_request_id || null);
+      setMaskedAuthenticatedMobile(
+        res?.data?.masked_authenticated_mobile ||
+        res?.data?.masked_authenticated_email ||
+        ""
+      );
+      setOtpExpiresAt(res?.data?.otp_expires_at || "");
+      setOtpType(res?.data?.otp_type || "");
+      setDeviceAlreadyVerified(!!res?.data?.device_already_verified);
+
+      if (flow === "DEVICE_OTP_SENT") {
+        setStep("DEVICE_OTP");
+        setSuccess("Device OTP resent successfully");
+      } else if (flow === "USER_OTP_SENT") {
+        setStep("USER_OTP");
+        setSuccess("User OTP resent successfully");
+      } else {
+        setError("Unable to resend OTP");
+      }
+    } catch (err) {
+      setError("Something went wrong while resending OTP");
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  const renderTitle = () => {
+    if (step === "DEVICE_OTP") return "Verify Device OTP";
+    if (step === "USER_OTP") return "Verify User OTP";
+    return "Login";
+  };
+
+  const renderDescription = () => {
+    if (step === "LOGIN") {
+      return "Enter your mobile number and password to continue.";
+    }
+
+    if (step === "DEVICE_OTP") {
+      return `Device OTP sent to ${maskedAuthenticatedMobile || "your registered contact"}.`;
+    }
+
+    return `User OTP sent to ${maskedAuthenticatedMobile || "your registered contact"}.`;
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
-      <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
-
-      <div className="absolute top-20 left-10 w-32 h-32 bg-gray-300 rounded-full opacity-10 animate-pulse"></div>
-      <div className="absolute bottom-20 right-10 w-24 h-24 bg-gray-400 rounded-full opacity-10 animate-pulse delay-1000"></div>
-      <div className="absolute top-1/2 left-20 w-16 h-16 bg-gray-500 rounded-full opacity-10 animate-pulse delay-500"></div>
-
-      <div className="relative z-10 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-2xl border border-gray-200/50 overflow-hidden">
-          <div className="bg-gradient-to-r from-gray-700 to-gray-800 px-6 py-4">
-            <div className="flex items-center justify-end">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-            </div>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+            <ShieldCheck size={22} className="text-black" />
           </div>
+          <h1 className="text-2xl font-semibold text-black">{renderTitle()}</h1>
+          <p className="mt-2 text-sm text-black">{renderDescription()}</p>
+        </div>
 
-          <div className="px-8 py-8">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">
-                Welcome Back
-              </h2>
-              <p className="text-gray-600 text-sm">
-                Sign in to access your dashboard
-              </p>
+        {error && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {success && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+            <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+            <span>{success}</span>
+          </div>
+        )}
+
+        {step === "LOGIN" && (
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-black">
+                Mobile Number
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-black">
+                  <Smartphone size={18} />
+                </div>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={mobile}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setMobile(e.target.value.replace(/\D/g, ""))
+                  }
+                  placeholder="Enter mobile number"
+                  className="h-11 w-full rounded-lg border border-gray-300 pl-10 pr-3 text-sm text-black outline-none focus:border-gray-500"
+                  required
+                />
+              </div>
             </div>
 
-            {error && (
-              <div className="mb-4 text-center text-sm text-red-600">
-                {error}
-              </div>
-            )}
-
-            <form className="space-y-6" onSubmit={handleSubmit}>
-              <div className="space-y-2">
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Mail
-                      size={18}
-                      className="text-gray-400 group-focus-within:text-gray-600 transition-colors duration-200"
-                    />
-                  </div>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={contact_no}
-                    onChange={handleMobileChange}
-                    className="block w-full pl-12 pr-4 py-3.5 border-2 rounded-xl shadow-sm placeholder-black text-black focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 transition-all duration-200 bg-white/50 backdrop-blur-sm border-gray-200"
-                    placeholder="Enter your mobile number"
-                    maxLength={10}
-                    required
-                  />
+            <div>
+              <label className="mb-1 block text-sm font-medium text-black">
+                Password
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-black">
+                  <Lock size={18} />
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Lock
-                      size={18}
-                      className="text-gray-400 group-focus-within:text-gray-600 transition-colors duration-200"
-                    />
-                  </div>
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
-                    className="block w-full pl-12 pr-12 py-3.5 border-2 rounded-xl shadow-sm placeholder-black text-black focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 transition-all duration-200 bg-white/50 backdrop-blur-sm border-gray-200"
-                    placeholder="Enter your password"
-                    required
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="pt-2">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setPassword(e.target.value)
+                  }
+                  placeholder="Enter password"
+                  className="h-11 w-full rounded-lg border border-gray-300 pl-10 pr-16 text-sm text-black outline-none focus:border-gray-500"
+                  autoComplete="current-password"
+                  required
+                />
                 <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full flex justify-center items-center py-4 px-6 border border-transparent rounded-xl shadow-lg text-sm font-semibold text-white bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-0 px-3 text-sm text-gray-500"
                 >
-                  {loading ? "Signing in..." : "Sign In"}
+                  {showPassword ? "Hide" : "Show"}
                 </button>
               </div>
-            </form>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="h-11 w-full rounded-lg bg-black text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
+            >
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 size={16} className="animate-spin" />
+                  Please wait...
+                </span>
+              ) : (
+                "Continue"
+              )}
+            </button>
+          </form>
+        )}
+
+        {step === "DEVICE_OTP" && (
+          <form onSubmit={handleDeviceOtpSubmit} className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-black">
+                Device OTP
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-black">
+                  <KeyRound size={18} />
+                </div>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={deviceOtp}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setDeviceOtp(e.target.value.replace(/\D/g, ""))
+                  }
+                  placeholder="Enter device OTP"
+                  className="h-11 w-full rounded-lg border border-gray-300 pl-10 pr-3 text-sm tracking-[0.3em] text-black outline-none focus:border-gray-500"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-700">
+              <p>OTP Type: {otpType || "-"}</p>
+              <p>Expires: {formatExpiryText() || "-"}</p>
+              <p>Device Verified: {deviceAlreadyVerified ? "Yes" : "No"}</p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="h-11 w-full rounded-lg bg-black text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
+            >
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 size={16} className="animate-spin" />
+                  Verifying...
+                </span>
+              ) : (
+                "Verify Device OTP"
+              )}
+            </button>
+          </form>
+        )}
+
+        {step === "USER_OTP" && (
+          <form onSubmit={handleUserOtpSubmit} className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-black">
+                User OTP
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-black">
+                  <KeyRound size={18} />
+                </div>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={userOtp}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setUserOtp(e.target.value.replace(/\D/g, ""))
+                  }
+                  placeholder="Enter user OTP"
+                  className="h-11 w-full rounded-lg border border-gray-300 pl-10 pr-3 text-sm tracking-[0.3em] text-black outline-none focus:border-gray-500"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-700">
+              <p>OTP Type: {otpType || "-"}</p>
+              <p>Expires: {formatExpiryText() || "-"}</p>
+              <p>Device Verified: {deviceAlreadyVerified ? "Yes" : "No"}</p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="h-11 w-full rounded-lg bg-black text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
+            >
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 size={16} className="animate-spin" />
+                  Verifying...
+                </span>
+              ) : (
+                "Verify User OTP"
+              )}
+            </button>
+          </form>
+        )}
+
+        {step !== "LOGIN" && (
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setStep("LOGIN");
+                resetOtpState();
+                setError("");
+                setSuccess("");
+              }}
+              className="h-10 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Change Login
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResendOtp}
+              disabled={resendLoading}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+            >
+              {resendLoading ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  Resending...
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={15} />
+                  Resend OTP
+                </>
+              )}
+            </button>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

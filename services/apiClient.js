@@ -657,9 +657,9 @@ class APIClient {
     return this.request(this.getRoute('AUTH', 'LOGOUT'), 'POST', null, true);
   }
 
-  async getProfile() {
-    return this.request(this.getRoute('AUTH', 'PROFILE'), 'GET', null, true);
-  }
+  // async getProfile() {
+  //   return this.request(this.getRoute('AUTH', 'PROFILE'), 'GET', null, true);
+  // }
 
   async changePassword(currentPassword, newPassword) {
     return this.request(this.getRoute('AUTH', 'CHANGE_PASSWORD'), 'PUT', { currentPassword, newPassword });

@@ -581,22 +581,24 @@ class ApiService {
     return this.handleResponse(response);
   }
 
-  async getProfile(): Promise<{ success: boolean; data: { user: User; accessibleResources: Record<string, string[]> } }> {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      throw new Error('No authentication token found');
-    }
+  // async getProfile(): Promise<{ success: boolean; data: { user: User; accessibleResources: Record<string, string[]> } }> {
+  //   const token = localStorage.getItem('authToken');
+  //   if (!token) {
+  //     throw new Error('No authentication token found');
+  //   }
 
-    const response = await fetch(`${this.baseURL}/auth/profile`, {
-      headers: this.getAuthHeaders(),
-    });
+  //   console.log('yyyyyyyyyyyyyyyyyy')
 
-    if (!response.ok && response.status === 401) {
-      // Don't throw here - let the caller handle it
-    }
+  //   const response = await fetch(`${this.baseURL}/auth/profile`, {
+  //     headers: this.getAuthHeaders(),
+  //   });
 
-    return this.handleResponse<{ success: boolean; data: { user: User; accessibleResources: Record<string, string[]> } }>(response, '/auth/profile');
-  }
+  //   if (!response.ok && response.status === 401) {
+  //     // Don't throw here - let the caller handle it
+  //   }
+
+  //   return this.handleResponse<{ success: boolean; data: { user: User; accessibleResources: Record<string, string[]> } }>(response, '/auth/profile');
+  // }
 
   async logout(): Promise<{ success: boolean; message: string }> {
     const response = await fetch(`${this.baseURL}/auth/logout`, {

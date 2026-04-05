@@ -1,26 +1,57 @@
 "use client";
 import { getMasterFilter, getTableDataByMasterFilter } from "@/apis/api";
-import { ArrowLeft, Play, RefreshCw } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { RefreshCw } from "lucide-react";
 import React, { useEffect, useState } from "react";
-import Select from "react-select";
+import Select, { type StylesConfig, type SingleValue } from "react-select";
+import { useAuth as useAuthContext } from '../../contexts/AuthContext'
+import Link from "next/link";
 
-const Header = ({ onDataReceived, onFilterChange }) => {
-  const router = useRouter();
+interface SelectOption {
+  label: string;
+  value: string;
+}
 
-  const [masterData, setMasterData] = useState({
+interface MasterDataState {
+  district: SelectOption[];
+  block_city: SelectOption[];
+  blockToDistrictMap: Map<string, string>;
+  isLoading: boolean;
+  noDataFound: boolean;
+}
+
+interface HeaderApiResponse {
+  success?: boolean;
+  data?: any[];
+  totalPages?: number;
+  total?: number;
+  page?: number;
+  subFilterOptions?: any;
+}
+
+interface HeaderProps {
+  onDataReceived?: (data: HeaderApiResponse) => void;
+  onFilterChange?: (filters: {
+    block_city: string;
+    distt: string;
+    ac_no: string;
+    pc_no: string;
+  }) => void;
+}
+
+const Header: React.FC<HeaderProps> = ({ onDataReceived, onFilterChange }) => {
+  const { logout } = useAuthContext();
+  const [masterData, setMasterData] = useState<MasterDataState>({
     district: [],
     block_city: [],
-    blockToDistrictMap: new Map(),
+    blockToDistrictMap: new Map<string, string>(),
     isLoading: true,
     noDataFound: false
   });
   const [showSubMenu, setShowSubMenu] = useState<boolean>(false)
-  const [selectedDistrict, setSelectedDistrict] = useState(null);
-  const [selectedBlock, setSelectedBlock] = useState(null);
-  const [selectedParliament, setSelectedParliament] = useState(null);
-  const [selectedAssembly, setSelectedAssembly] = useState(null);
+  const [selectedDistrict, setSelectedDistrict] = useState<SelectOption | null>(null);
+  const [selectedBlock, setSelectedBlock] = useState<SelectOption | null>(null);
+  const [selectedParliament, setSelectedParliament] = useState<SelectOption | null>(null);
+  const [selectedAssembly, setSelectedAssembly] = useState<SelectOption | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fetchMasterFilterData = async () => {
@@ -41,25 +72,31 @@ const Header = ({ onDataReceived, onFilterChange }) => {
         return;
       }
 
-      const blockToDistrictMap = new Map();
+      const blockToDistrictMap = new Map<string, string>();
 
-      const uniqueDistricts = [...new Set(res.map(item => item.districts[0]))];
-      const districtOptions = uniqueDistricts.map(district => ({
+      const uniqueDistricts = [
+        ...new Set<string>((res as any[]).map((item: any) => String(item.districts?.[0] ?? "")))
+      ].filter(Boolean);
+
+      const districtOptions: SelectOption[] = uniqueDistricts.map((district) => ({
         label: district,
         value: district,
       }));
 
-      const allBlocks = [];
-      res.forEach(item => {
-        const district = item.districts[0];
-        item.blocks.forEach(block => {
-          allBlocks.push(block);
-          blockToDistrictMap.set(block, district);
+      const allBlocks: string[] = [];
+      (res as any[]).forEach((item: any) => {
+        const district = String(item.districts?.[0] ?? "");
+        (item.blocks || []).forEach((block: any) => {
+          const blockValue = String(block ?? "");
+          if (blockValue) {
+            allBlocks.push(blockValue);
+            blockToDistrictMap.set(blockValue, district);
+          }
         });
       });
 
-      const uniqueBlocks = [...new Set(allBlocks)];
-      const blockOptions = uniqueBlocks.map(block => ({
+      const uniqueBlocks = [...new Set<string>(allBlocks)];
+      const blockOptions: SelectOption[] = uniqueBlocks.map((block) => ({
         label: block,
         value: block,
       }));
@@ -88,7 +125,7 @@ const Header = ({ onDataReceived, onFilterChange }) => {
     fetchMasterFilterData();
   }, []);
 
-  const handleBlockChange = (selectedOption) => {
+  const handleBlockChange = (selectedOption: SingleValue<SelectOption>) => {
     setSelectedBlock(selectedOption);
 
     if (selectedOption) {
@@ -100,17 +137,15 @@ const Header = ({ onDataReceived, onFilterChange }) => {
     }
   };
 
-  const handleDistrictChange = (selectedOption) => {
+  const handleDistrictChange = (selectedOption: SingleValue<SelectOption>) => {
     setSelectedDistrict(selectedOption);
     if (!selectedOption) {
       setSelectedBlock(null);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("userInfo");
-    window.location.href = "/login";
+  const handleLogout = async () => {
+    await logout();
   };
 
   const handleGo = async () => {
@@ -177,7 +212,7 @@ const Header = ({ onDataReceived, onFilterChange }) => {
   };
 
   // Custom styles for react-select to match your filter inputs
-  const selectStyles = {
+  const selectStyles: StylesConfig<SelectOption, false> = {
     control: (base) => ({
       ...base,
       minHeight: "32px",
@@ -241,7 +276,7 @@ const Header = ({ onDataReceived, onFilterChange }) => {
   return (
     <>
       <div className="bg-white border-b px-4 py-3 flex items-center">
-        <Link href={'/'}>
+        <Link href='/'>
           <div className="flex items-center gap-2">
             <img src="/logo.png" className="w-8 h-8" alt="Logo" />
             <span className="font-semibold text-gray-800">THE BIG OWL</span>
@@ -252,7 +287,7 @@ const Header = ({ onDataReceived, onFilterChange }) => {
           <div className="flex items-center gap-2">
             {/* Parliament Select - Small like filter inputs */}
             <div className="w-40">
-              <Select
+              <Select<SelectOption, false>
                 options={[]}
                 value={selectedParliament}
                 onChange={setSelectedParliament}
@@ -267,7 +302,7 @@ const Header = ({ onDataReceived, onFilterChange }) => {
 
             {/* Assembly Select - Small like filter inputs */}
             <div className="w-40">
-              <Select
+              <Select<SelectOption, false>
                 options={[]}
                 value={selectedAssembly}
                 onChange={setSelectedAssembly}
@@ -282,7 +317,7 @@ const Header = ({ onDataReceived, onFilterChange }) => {
 
             {/* District Select - Small like filter inputs */}
             <div className="w-40">
-              <Select
+              <Select<SelectOption, false>
                 options={masterData.district}
                 value={selectedDistrict}
                 onChange={handleDistrictChange}
@@ -304,7 +339,7 @@ const Header = ({ onDataReceived, onFilterChange }) => {
 
             {/* Block Select - Small like filter inputs */}
             <div className="w-40">
-              <Select
+              <Select<SelectOption, false>
                 options={masterData.block_city}
                 value={selectedBlock}
                 onChange={handleBlockChange}

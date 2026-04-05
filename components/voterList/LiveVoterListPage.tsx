@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { HotTable } from "@handsontable/react";
 import { registerAllModules } from "handsontable/registry";
 import "handsontable/dist/handsontable.full.min.css";
+import Handsontable from "handsontable";
 
 import { LiveMasterFilter } from "./LiveMasterFilter";
 import { LiveVoterFilters } from "./LiveVoterFilters";
@@ -17,6 +18,7 @@ import {
   getVoterListSubFilter,
   getYojnaListApi,
   volterMasterFilterGo,
+  saveLiveVoterListApi
 } from "@/apis/api";
 import { getOriginalKey, mapFiltersToBackend } from "@/utils/helper";
 import YojnaModal from "./YojnaModal";
@@ -39,9 +41,14 @@ interface VoterData {
   section?: string;
   sec_no?: number;
   castid?: string;
+  cast_id_hi?: string;
   cast_cat?: string;
+  castid_surname?: string;
+  cast_id_surname?: string;
   edu_id?: string;
+  education_id_hi?: string;
   proff_id?: string;
+  proffession_id_hi?: string;
   phone1?: string | null;
   data_id?: number;
   card_id?: string;
@@ -68,6 +75,30 @@ interface MappingResponse {
   bhag_no?: any[];
   castid?: any[];
   sex?: any[];
+}
+
+interface Metadata {
+  totalRecords: number;
+  currentPage: number;
+  totalPages: number;
+}
+
+interface MappingData {
+  block: string | null;
+  block_id: string | null;
+  gp_ward: string | null;
+  gp_ward_id: string | null;
+  kendra: string | null;
+  kendra_id: string | null;
+  mandal: string | null;
+  mandal_id: string | null;
+  pincode: string | null;
+  pjila: string | null;
+  policst: string | null;
+  postoff: string | null;
+  ru: string | null;
+  village: string | null;
+  village_id: string | null;
 }
 
 interface ApiResponse {
@@ -97,15 +128,6 @@ interface FilterOptions {
   castId: string[];
   sex: string[];
   dataIds: string[];
-}
-
-interface ApiResponse {
-  success: boolean;
-  voters?: VoterData[];
-  mapping?: MappingData;
-  metadata?: Metadata;
-  data?: any[];
-  [key: string]: any;
 }
 
 interface MasterFilterItem {
@@ -227,7 +249,7 @@ export default function LiveVoterListPage(): React.ReactElement {
     totalPages: 1,
   });
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [itemsPerPage, setItemsPerPage] = useState<number | "All">(50);
+  const [itemsPerPage, setItemsPerPage] = useState<number | "All">(1000);
   const [currentFilters, setCurrentFilters] = useState<any>({});
 
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
@@ -258,9 +280,9 @@ export default function LiveVoterListPage(): React.ReactElement {
   const [selectedSection, setSelectedSection] = useState<string>("");
   const [loadingAcData, setLoadingAcData] = useState<boolean>(false);
   const [isGoClicked, setIsGoClicked] = useState<boolean>(false)
+  const [editedRows, setEditedRows] = useState<Record<number, any>>({});
 
-  const [yojnaData, setYojnaData] = useState<boolean>(false)
-  console.log('you ja ->>>> ', yojnaData)
+  const [yojnaData, setYojnaData] = useState<any[]>([])
   const [showModal, setShowModal] = useState<boolean>(false)
 
   const [blockOptions, setBlockOptions] = useState<string[]>([]);
@@ -500,10 +522,12 @@ export default function LiveVoterListPage(): React.ReactElement {
         setSelectedPartyDistrict(String(params.party_district_id));
       }
 
+      const resolvedLimit = Number(itemsPerPage);
+
       const queryParams = {
         ...params,
         page,
-        limit: itemsPerPage === "All" ? 1000 : itemsPerPage,
+        limit: resolvedLimit,
       };
 
       const response: ApiResponse = await volterMasterFilterGo(queryParams);
@@ -519,7 +543,16 @@ export default function LiveVoterListPage(): React.ReactElement {
       }
 
       if (Array.isArray(response.voters)) {
-        setVoterData(response.voters);
+        const enrichedVoters = response.voters.map((row: any) => ({
+          ...row,
+          cast_id: row.cast_id ?? "",
+          cast_cat_name: row.cast_cat_name ?? "",
+          cast_id_surname: row.cast_id_surname ?? "",
+          education_id: row.education_id ?? "",
+          proffession_id: row.proffession_id ?? "",
+        }));
+
+        setVoterData(enrichedVoters);
       }
       setIsGoClicked(true)
       const mapping: any = response.mapping;
@@ -528,14 +561,18 @@ export default function LiveVoterListPage(): React.ReactElement {
         console.log("Raw mapping data:", mapping); // Debug log
 
         // Helper function to transform array of objects to array of objects (keeping structure)
-        const transformToObjects = (array?: any[], idKey?: string, nameKey?: string): any[] => {
+        const transformToObjects = (
+          array: Record<string, any>[] = [],
+          idKey: string,
+          nameKey: string
+        ): Record<string, any>[] => {
           if (!Array.isArray(array)) return [];
 
           return array
-            .filter(item => item && item[idKey] && item[nameKey])
-            .map(item => ({
-              [`${idKey}`]: item[idKey],
-              [`${nameKey}`]: item[nameKey]
+            .filter((item) => item && item[idKey] && item[nameKey])
+            .map((item) => ({
+              [idKey]: item[idKey],
+              [nameKey]: item[nameKey],
             }));
         };
 
@@ -597,7 +634,12 @@ export default function LiveVoterListPage(): React.ReactElement {
       const page = targetPage !== undefined ? Number(targetPage) : Number(currentPage);
 
       // Calculate limit properly
-      const apiLimit = itemsPerPage === "All" ? 1000 : Number(itemsPerPage);
+      const apiLimit =
+        itemsPerPage === "All"
+          ? metadata.totalRecords > 0
+            ? metadata.totalRecords
+            : 1000000
+          : Number(itemsPerPage);
 
       // Helper function to safely convert to number or return undefined
       const safeNumber = (value: any): number | undefined => {
@@ -689,7 +731,14 @@ export default function LiveVoterListPage(): React.ReactElement {
       // FIX: Check the response structure - data is in 'voters' field
       if (response && response.success) {
         // ✅ FIX: Use response.voters instead of response.data
-        const votersData = response.voters || [];
+        const votersData = (response.voters || []).map((row: any) => ({
+          ...row,
+          cast_id: row.cast_id ?? "",
+          cast_cat_name: row.cast_cat_name ?? "",
+          cast_id_surname: row.cast_id_surname ?? "",
+          education_id: row.education_id ?? "",
+          proffession_id: row.proffession_id ?? "",
+        }));
 
         if (votersData && votersData.length > 0) {
           setVoterData(votersData);
@@ -715,13 +764,18 @@ export default function LiveVoterListPage(): React.ReactElement {
           const mapping = response.mapping;
           console.log("Raw mapping data:", mapping);
 
-          const transformToObjects = (array?: any[], idKey?: string, nameKey?: string): any[] => {
+          const transformToObjects = (
+            array: any[] = [],
+            idKey: string,
+            nameKey: string
+          ): any[] => {
             if (!Array.isArray(array)) return [];
+
             return array
-              .filter(item => item && item[idKey] && item[nameKey])
-              .map(item => ({
+              .filter((item) => item && item[idKey] && item[nameKey])
+              .map((item) => ({
                 [idKey]: item[idKey],
-                [nameKey]: item[nameKey]
+                [nameKey]: item[nameKey],
               }));
           };
 
@@ -784,19 +838,22 @@ export default function LiveVoterListPage(): React.ReactElement {
     setItemsPerPage(value);
     setCurrentPage(1);
 
-    // Calculate the actual limit value to send to API
-    const apiLimit = value === "All" ? 1000 : value;
+    const apiLimit =
+      value === "All"
+        ? metadata.totalRecords > 0
+          ? metadata.totalRecords
+          : 1000000
+        : Number(value);
 
     if (activeFilterMode === "master") {
-      if (Object.keys(currentFilters).length > 0) {
-        await handleApplyFilters({
-          ...currentFilters,
-          page: 1,
-          limit: apiLimit,
-        });
-      }
+      // Always re-run master filters when page size changes
+      await handleApplyFilters({
+        ...currentFilters,
+        page: 1,
+        limit: apiLimit,
+      });
     } else {
-      // For sub filter, call with page 1 and new limit
+      // For sub-filter, call with page 1 and new limit
       await handleSubFilterGo(1);
     }
   };
@@ -895,9 +952,6 @@ export default function LiveVoterListPage(): React.ReactElement {
       sex: [],
       dataIds: [],
     });
-
-    // ❌ DO NOT call handleApplyFilters or any API
-    // await handleApplyFilters({});
   };
 
   const handleDownloadPDF = async (requestData?: any) => {
@@ -956,6 +1010,34 @@ export default function LiveVoterListPage(): React.ReactElement {
     }
   };
 
+  const handleSaveChanges = async () => {
+    try {
+      setLoading(true);
+
+      const payload = Object.values(editedRows);
+
+      if (payload.length === 0) {
+        alert("No changes to save");
+        return;
+      }
+
+      const res = await saveLiveVoterListApi(payload);
+
+      if (res?.success) {
+        setShowSaveRibbon(true);
+        setTimeout(() => setShowSaveRibbon(false), 3000);
+        setEditedRows({});
+      } else {
+        alert(res?.message || "Save failed");
+      }
+    } catch (error) {
+      console.error("Save error:", error);
+      alert("Something went wrong while saving changes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const HIDDEN_COLUMNS = [
     "acc_no",
     "accNo",
@@ -968,9 +1050,69 @@ export default function LiveVoterListPage(): React.ReactElement {
     voterData.length > 0
       ? (() => {
 
-        const allColumns = Object.keys(voterData[0])
-          .filter((key) => !HIDDEN_COLUMNS.includes(key.toLowerCase()))
-          .map((key) => ({
+        const visibleKeys = Object.keys(voterData[0]).filter(
+          (key) => !HIDDEN_COLUMNS.includes(key.toLowerCase())
+        );
+
+        const extraColumnsMap: Record<string, Handsontable.ColumnSettings[]> = {
+          castid: [
+            {
+              data: "cast_id",
+              title: "CAST HI",
+              readOnly: false,
+              className: "htCenter htMiddle",
+            },
+          ],
+          castid_surname: [
+            {
+              data: "cast_id_surname",
+              title: "SURNAME HI",
+              readOnly: false,
+              className: "htCenter htMiddle",
+            },
+          ],
+          edu_id: [
+            {
+              data: "education_id",
+              title: "EDU HI",
+              readOnly: false,
+              className: "htCenter htMiddle",
+            },
+          ],
+          proff_id: [
+            {
+              data: "proffession_id",
+              title: "PROFF HI",
+              readOnly: false,
+              className: "htCenter htMiddle",
+            },
+          ],
+        };
+
+        const orderedKeys: string[] = [];
+
+        visibleKeys.forEach((key) => {
+          orderedKeys.push(key);
+
+          if (extraColumnsMap[key]) {
+            extraColumnsMap[key].forEach((column) => {
+              if (typeof column.data === "string") {
+                orderedKeys.push(column.data);
+              }
+            });
+          }
+        });
+
+        const allColumns = orderedKeys.map((key) => {
+          const manualColumn = Object.values(extraColumnsMap)
+            .flat()
+            .find((column) => column.data === key);
+
+          if (manualColumn) {
+            return manualColumn;
+          }
+
+          return {
             data: key,
             title: key.replace(/_/g, " ").toUpperCase(),
             readOnly: false,
@@ -985,25 +1127,56 @@ export default function LiveVoterListPage(): React.ReactElement {
                 prop: any,
                 value: any
               ) => {
-                const surnameValue =
-                  value && typeof value === "object"
-                    ? value.surname || "-"
-                    : value || "-";
+                let surnameValue = "-";
+                if (value && typeof value === "object") {
+
+                  // Handle surname object with r and v properties
+                  const voterSurname = value.v || "";
+                  const relationSurname = value.r || "";
+
+                  if (voterSurname && relationSurname) {
+                    surnameValue = `V: ${voterSurname} R: ${relationSurname}`;
+                  } else if (voterSurname) {
+                    surnameValue = `V: ${voterSurname}`;
+                  } else if (relationSurname) {
+                    surnameValue = `R: ${relationSurname}`;
+                  } else if (value.surname) {
+                    surnameValue = value.surname;
+                  }
+                } else if (value) {
+                  surnameValue = value;
+                }
 
                 td.textContent = surnameValue;
                 td.className = "htCenter htMiddle";
                 return td;
               },
             }),
-          }));
+
+            ...(key === "hof" && {
+              renderer: (
+                instance: any,
+                td: any,
+                row: any,
+                col: any,
+                prop: any,
+                value: any
+              ) => {
+                const hofValue = value === 1 ? "HOF" : value === 0 ? "MEM" : value || "-";
+                td.textContent = hofValue;
+                td.className = "htCenter htMiddle";
+                return td;
+              },
+            }),
+          };
+        });
 
 
         /* ADD ACTION COLUMN */
 
         allColumns.push({
-          data: null,
+          data: null as any,
           title: "ACTION",
-          width: 80,
           readOnly: true,
           className: "htCenter htMiddle",
 
@@ -1080,7 +1253,7 @@ export default function LiveVoterListPage(): React.ReactElement {
           showDownloadPrintMenu={showDownloadPrintMenu}
           setShowDownloadPrintMenu={setShowDownloadPrintMenu}
           onPrintClick={() => setShowPrintModal(true)}
-          onSaveClick={() => setShowSaveRibbon(true)}
+          onSaveClick={handleSaveChanges}
           onRefresh={handleRefresh}
           onSubFilterGo={handleSubFilterGo}
           loading={loading}
@@ -1093,7 +1266,7 @@ export default function LiveVoterListPage(): React.ReactElement {
 
       <div
         className="flex-1 overflow-hidden bg-white z-0"
-        style={{ height: "calc(100vh - 340px)", minHeight: "500px" }}
+        style={{ minHeight: "calc(100vh - 160px)", maxHeight: "calc(100vh - 120px)" }}
       >
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-hidden">
@@ -1134,8 +1307,37 @@ export default function LiveVoterListPage(): React.ReactElement {
               <HotTable
                 ref={hotTableRef}
                 data={voterData}
-                colHeaders={columns.map((col) => col.title)}
+                colHeaders={columns.map((col) =>
+                  typeof col.title === "string" ? col.title : ""
+                )}
                 columns={columns}
+
+                afterChange={(changes, source) => {
+                  if (!changes || source === "loadData") return;
+
+                  setEditedRows((prev) => {
+                    const updated = { ...prev };
+
+                    changes.forEach(([rowIndex, prop, oldValue, newValue]: any) => {
+                      if (oldValue === newValue) return;
+
+                      const rowData = voterData[rowIndex];
+                      if (!rowData) return;
+
+                      const rowId: any = rowData.id;
+
+                      updated[rowId] = {
+                        ...(updated[rowId] || {
+                          id: rowData.id,
+                          data_id: rowData.data_id,
+                        }),
+                        [prop]: newValue,
+                      };
+                    });
+
+                    return updated;
+                  });
+                }}
 
                 rowHeaders={(index) => {
                   const style = 'style="font-size:10px;text-align:center;height:10px;"';
@@ -1143,13 +1345,12 @@ export default function LiveVoterListPage(): React.ReactElement {
                 }}
 
                 width="100%"
-                height={565}
+                height="calc(100vh - 195px)"
 
                 wordWrap={false}
                 licenseKey="non-commercial-and-evaluation"
 
-                stretchH="none"        // ✅ IMPORTANT (prevents forced column stretch)
-
+                stretchH="all"
                 filters={false}
                 columnSorting={true}
 
@@ -1163,12 +1364,11 @@ export default function LiveVoterListPage(): React.ReactElement {
 
                 fillHandle={true}
 
-                autoWrapRow={false}    // ✅ Prevent row height growth
+                autoWrapRow={false}
                 autoWrapCol={false}
 
                 rowHeights={25}
-
-                autoColumnSize={true}  // ✅ Fit column width to content
+                autoColumnSize={true}
 
                 className="htCompact"
               />

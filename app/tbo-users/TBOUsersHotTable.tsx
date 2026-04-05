@@ -45,12 +45,12 @@ function getAssignCode(user: any): string {
 interface TBOUsersHotTableProps {
     data: any[];
     loading: boolean;
-    onUpdateCell: (rowIndex: number, colId: string, value: any) => Promise<void>;
+    onUpdateCell: (userId: number, colId: string, value: any) => void;
     onManageUser: (user: any) => void;
     onModulesClick: (user: any) => void;
     onDataAssignClick: (user: any) => Promise<void>;
     onParentClick: (user: any) => void;
-    hasPermission: (perm: string) => boolean;
+    hasPermission?: (perm: string) => boolean;
 }
 
 export default function TBOUsersHotTable({
@@ -96,6 +96,8 @@ export default function TBOUsersHotTable({
             td.style.fontSize = "12px";
             td.style.verticalAlign = "middle";
             td.style.backgroundColor = "#f9fafb";
+            td.style.textAlign = "center";
+            td.style.verticalAlign = "middle";
             if (value) {
                 td.textContent = String(value);
             } else {
@@ -195,7 +197,10 @@ export default function TBOUsersHotTable({
             td.style.verticalAlign = "middle";
             td.style.backgroundColor = "#f9fafb";
 
-            if (!value) {
+            const user = data[row];
+            const isBlank = user && user.id && String(user.id).startsWith("blank-");
+
+            if (isBlank) {
                 td.style.color = "#9ca3af";
                 td.style.fontSize = "11px";
                 td.textContent = "-";
@@ -205,48 +210,137 @@ export default function TBOUsersHotTable({
             const wrapper = document.createElement("div");
             wrapper.style.display = "flex";
             wrapper.style.alignItems = "center";
-            wrapper.style.gap = "4px";
+            wrapper.style.gap = "6px";
             wrapper.style.maxWidth = "100%";
 
             const span = document.createElement("span");
-            span.textContent = String(value);
+            span.textContent = value ? String(value) : "-";
             span.style.fontSize = "11px";
             span.style.fontFamily = "monospace";
-            span.style.color = "#1e40af";
-            span.style.backgroundColor = "#eff6ff";
+            span.style.color = value ? "#1e40af" : "#6b7280";
+            span.style.backgroundColor = value ? "#eff6ff" : "#f3f4f6";
             span.style.padding = "2px 6px";
             span.style.borderRadius = "4px";
             span.style.overflow = "hidden";
             span.style.textOverflow = "ellipsis";
             span.style.whiteSpace = "nowrap";
-            span.style.maxWidth = "calc(100% - 28px)";
-            span.title = String(value);
+            span.style.maxWidth = "calc(100% - 52px)";
+            span.title = value ? String(value) : "-";
 
+            // COPY BUTTON
+            // COPY BUTTON
             const copyBtn = document.createElement("button");
-            copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
-            copyBtn.style.border = "none";
-            copyBtn.style.background = "transparent";
+            copyBtn.innerHTML = "⧉";
+            copyBtn.style.border = "1px solid #e5e7eb";
+            copyBtn.style.background = "#ffffff";
             copyBtn.style.cursor = "pointer";
-            copyBtn.style.padding = "2px";
+            copyBtn.style.padding = "2px 6px";
+            copyBtn.style.borderRadius = "4px";
             copyBtn.style.color = "#6b7280";
+            copyBtn.style.fontSize = "11px";
+            copyBtn.style.transition = "all 0.15s ease";
             copyBtn.style.flexShrink = "0";
             copyBtn.title = "Copy";
-            copyBtn.addEventListener("click", (e) => {
+
+            copyBtn.addEventListener("mouseenter", () => {
+                copyBtn.style.background = "#f3f4f6";
+            });
+
+            copyBtn.addEventListener("mouseleave", () => {
+                copyBtn.style.background = "#ffffff";
+            });
+
+            copyBtn.addEventListener("click", async (e) => {
                 e.stopPropagation();
-                navigator.clipboard.writeText(String(value)).then(() => {
+
+                const textToCopy = value ? String(value) : "";
+                if (!textToCopy) return;
+
+                try {
+                    await navigator.clipboard.writeText(textToCopy);
+
+                    copyBtn.innerHTML = "✓";
                     copyBtn.style.color = "#16a34a";
+                    copyBtn.style.borderColor = "#16a34a";
+                    copyBtn.style.background = "#ecfdf5";
+
                     setTimeout(() => {
+                        copyBtn.innerHTML = "⧉";
                         copyBtn.style.color = "#6b7280";
-                    }, 1500);
-                });
+                        copyBtn.style.borderColor = "#e5e7eb";
+                        copyBtn.style.background = "#ffffff";
+                    }, 1200);
+                } catch (err) {
+                    console.error("Failed to copy code:", err);
+                }
+            });
+
+            // PASTE BUTTON
+            // PASTE BUTTON
+            const pasteBtn = document.createElement("button");
+            pasteBtn.innerHTML = "📋";
+            pasteBtn.style.border = "1px solid #e5e7eb";
+            pasteBtn.style.background = "#ffffff";
+            pasteBtn.style.cursor = "pointer";
+            pasteBtn.style.padding = "2px 6px";
+            pasteBtn.style.borderRadius = "4px";
+            pasteBtn.style.color = "#2563eb";
+            pasteBtn.style.fontSize = "11px";
+            pasteBtn.style.transition = "all 0.15s ease";
+            pasteBtn.style.flexShrink = "0";
+            pasteBtn.title = "Paste";
+
+            pasteBtn.addEventListener("mouseenter", () => {
+                pasteBtn.style.background = "#eff6ff";
+            });
+
+            pasteBtn.addEventListener("mouseleave", () => {
+                pasteBtn.style.background = "#ffffff";
+            });
+
+            pasteBtn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+
+                try {
+                    const pastedText = await navigator.clipboard.readText();
+                    if (!pastedText) return;
+
+                    const colIndex = typeof prop === "number" ? prop : Number(prop);
+                    const colId = COL_IDS[colIndex];
+
+                    if (!colId || (colId !== "modules_code" && colId !== "permission_code")) {
+                        return;
+                    }
+
+                    const userId = data[row]?.id;
+                    if (!userId) return;
+
+                    onUpdateCell(userId, colId, pastedText.trim());
+
+                    pasteBtn.innerHTML = "✓";
+                    pasteBtn.style.color = "#16a34a";
+                    pasteBtn.style.borderColor = "#16a34a";
+                    pasteBtn.style.background = "#ecfdf5";
+
+                    setTimeout(() => {
+                        pasteBtn.innerHTML = "📋";
+                        pasteBtn.style.color = "#2563eb";
+                        pasteBtn.style.borderColor = "#e5e7eb";
+                        pasteBtn.style.background = "#ffffff";
+                    }, 1200);
+                } catch (err) {
+                    console.error("Failed to paste code:", err);
+                }
             });
 
             wrapper.appendChild(span);
             wrapper.appendChild(copyBtn);
+            wrapper.appendChild(pasteBtn);
             td.appendChild(wrapper);
+
             return td;
         },
-        []
+        [data, onUpdateCell]
     );
 
     // Custom renderer for Actions column
@@ -339,7 +433,7 @@ export default function TBOUsersHotTable({
                 display: "inline-block",
                 width: "100%",
                 textAlign: "center",
-                margin:"0 40px 0 40px"
+                margin: "0 40px 0 40px"
             });
             wrapper.appendChild(settingLink);
 
@@ -415,7 +509,7 @@ export default function TBOUsersHotTable({
         "role",
         "username",
         "mobile",
-        "modulesCode",
+        "modules_code",
         "permission_code",
         "assignmentCode",
         "actions",
@@ -424,15 +518,22 @@ export default function TBOUsersHotTable({
     const handleAfterChange = useCallback(
         (changes: Handsontable.CellChange[] | null, source: string) => {
             if (!changes || source === "loadData") return;
+
             changes.forEach(([row, col, oldVal, newVal]) => {
                 if (oldVal === newVal) return;
+
                 const colIndex = typeof col === "number" ? col : Number(col);
                 const colId = COL_IDS[colIndex];
+
                 if (!colId || colId === "id" || colId === "actions") return;
-                onUpdateCell(row, colId, newVal);
+
+                const userId = data[row]?.id;
+                if (!userId) return;
+
+                onUpdateCell(userId, colId, newVal);
             });
         },
-        [onUpdateCell]
+        [onUpdateCell, data]
     );
 
     // Determine read-only rows (blank rows)
@@ -507,7 +608,7 @@ export default function TBOUsersHotTable({
                 colHeaders={true}
                 rowHeaders={false}
                 width="100%"
-                height={data.length === 0 ? 100 : Math.min(data.length * 42 + 50, 550)}
+                height={data.length === 0 ? 100 : Math.min(data.length * 42 + 50, 590)}
                 licenseKey="non-commercial-and-evaluation"
                 afterChange={handleAfterChange}
                 stretchH="all"
@@ -519,7 +620,7 @@ export default function TBOUsersHotTable({
                 autoWrapRow={true}
                 autoWrapCol={true}
                 wordWrap={false}
-                className="htMiddle"
+                className="htMiddle htCenter"
                 tableClassName="tbo-users-hot"
             />
         </div>

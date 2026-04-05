@@ -27,28 +27,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const { user, loading, hasRole, hasPermission, canAccess } = useAuth();
   const router = useRouter();
 
-  console.log('🔍 ProtectedRoute - loading:', loading, 'user:', user, 'requiredRole:', requiredRole);
-
   useEffect(() => {
     if (!loading && !user) {
-      // Check localStorage as fallback - sometimes state hasn't updated yet
-      const storedUser = localStorage.getItem('userInfo');
-      const storedToken = localStorage.getItem('authToken');
-      
-      if (!storedUser || !storedToken) {
-        console.log('🔍 ProtectedRoute - redirecting to login, no user found in state or localStorage');
-        router.push(redirectTo);
-      } else {
-        console.log('ℹ️ ProtectedRoute - User found in localStorage but not in state, waiting for state update...');
-        // Give it a moment for state to update
-        const timeout = setTimeout(() => {
-          if (!user) {
-            console.log('🔍 ProtectedRoute - State still not updated, redirecting to login');
-            router.push(redirectTo);
-          }
-        }, 1000);
-        return () => clearTimeout(timeout);
-      }
+      router.push(redirectTo);
     }
   }, [loading, user, router, redirectTo]);
 
@@ -98,17 +79,17 @@ export const SuperAdminOnly: React.FC<{ children: ReactNode }> = ({ children }) 
 
 export const AdminOnly: React.FC<{ children: ReactNode; moduleId?: string }> = ({ children, moduleId = 'tbo-users' }) => {
   const { user, hasRole, hasModuleAccess, hasPermission } = useAuth();
-  
+
   // Super admin and admin always have access
   if (user && (hasRole('super_admin') || hasRole('admin'))) {
     console.log(`✅ AdminOnly: User is ${user.role}, allowing access`);
     return <>{children}</>;
   }
-  
+
   if (!user) {
     return <div>Access Denied</div>;
   }
-  
+
   // Check if user has module access (checks both assignedModules and permissions)
   if (hasModuleAccess && typeof hasModuleAccess === 'function') {
     const hasAccess = hasModuleAccess(moduleId);
@@ -118,13 +99,13 @@ export const AdminOnly: React.FC<{ children: ReactNode; moduleId?: string }> = (
       permissions: user.permissions,
       hasAccess
     });
-    
+
     if (hasAccess) {
       console.log(`✅ AdminOnly: User has module access to ${moduleId}, allowing access`);
       return <>{children}</>;
     }
   }
-  
+
   // Also check for permission-based access (e.g., "tbo-users:read", "tbo_users:read")
   if (hasPermission && typeof hasPermission === 'function') {
     const moduleIdVariants = [
@@ -132,7 +113,7 @@ export const AdminOnly: React.FC<{ children: ReactNode; moduleId?: string }> = (
       moduleId.replace('-', '_'),
       moduleId.replace('_', '-')
     ];
-    
+
     for (const variant of moduleIdVariants) {
       // Check for common permission patterns
       const permissionPatterns = [
@@ -144,7 +125,7 @@ export const AdminOnly: React.FC<{ children: ReactNode; moduleId?: string }> = (
         `${variant}:admin`,
         variant
       ];
-      
+
       for (const perm of permissionPatterns) {
         if (hasPermission(perm)) {
           console.log(`✅ AdminOnly: User has permission ${perm}, allowing access`);
@@ -153,7 +134,7 @@ export const AdminOnly: React.FC<{ children: ReactNode; moduleId?: string }> = (
       }
     }
   }
-  
+
   // Check if user has the module in their permissions array directly
   if (user.permissions && Array.isArray(user.permissions)) {
     const moduleIdVariants = [
@@ -163,23 +144,23 @@ export const AdminOnly: React.FC<{ children: ReactNode; moduleId?: string }> = (
       moduleId.toLowerCase(),
       moduleId.replace('-', '_').toLowerCase()
     ];
-    
+
     const hasModulePermission = user.permissions.some((perm: string) => {
       const permLower = perm.toLowerCase();
       return moduleIdVariants.some(variant => {
         const variantLower = variant.toLowerCase();
-        return permLower.includes(variantLower) || 
-               permLower.startsWith(`${variantLower}:`) ||
-               permLower === variantLower;
+        return permLower.includes(variantLower) ||
+          permLower.startsWith(`${variantLower}:`) ||
+          permLower === variantLower;
       });
     });
-    
+
     if (hasModulePermission) {
       console.log(`✅ AdminOnly: User has module permission in permissions array, allowing access`);
       return <>{children}</>;
     }
   }
-  
+
   // No access
   console.log(`🚫 AdminOnly: Access denied. User role: ${user.role}, Module: ${moduleId}`, {
     assignedModules: user.assignedModules,

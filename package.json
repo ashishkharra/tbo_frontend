@@ -14,6 +14,7 @@
     "axios": "^1.13.2",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
+    "framer-motion": "^12.38.0",
     "handsontable": "^16.2.0",
     "jspdf": "^4.0.0",
     "jspdf-autotable": "^5.0.7",
@@ -25,7 +26,9 @@
     "react-easy-crop": "^5.5.6",
     "react-select": "^5.10.2",
     "react-toastify": "^11.0.5",
-    "szip": "^1.0.3"
+    "sanscript": "^0.0.2",
+    "szip": "^1.0.3",
+    "transliterate": "^1.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

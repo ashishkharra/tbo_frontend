@@ -178,6 +178,7 @@ export default function FilterDashboardUI() {
   const checking = useAuth();
   const hotTableRef = useRef<any>(null);
 
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [voterData, setVoterData] = useState<VoterData[]>([]);
   const [formattedData, setFormattedData] = useState<FormattedVoterData[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -612,7 +613,7 @@ export default function FilterDashboardUI() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
-      <Header onDataReceived={handleVoterDataReceived} onFilterChange={(filters: any) => { }} />
+      <Header onDataReceived={() => handleVoterDataReceived} onFilterChange={(filters: any) => { }} />
 
       <FamilyDetailsPopup
         isOpen={isPopupOpen}
@@ -622,7 +623,7 @@ export default function FilterDashboardUI() {
       />
 
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        { (
+        {(
           <div className="flex-shrink-0">
             <FilterBar
               selectedFilters={selectedFilters}
@@ -641,6 +642,8 @@ export default function FilterDashboardUI() {
               onExportExcel={handleExportToExcel}
               onExportCSV={handleExportToCSV}
               hasData={voterData.length > 0}
+              activeDropdown={activeDropdown}
+              setActiveDropdown={setActiveDropdown}
             />
           </div>
         )}

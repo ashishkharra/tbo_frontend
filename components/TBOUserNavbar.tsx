@@ -91,7 +91,7 @@ export default function TBOUserNavbar() {
             <div className="hidden lg:flex items-center space-x-1">
               {menuOptions.map((option) => {
                 // Filter admin-only options
-                if (option.adminOnly && user && !['super_admin', 'admin'].includes(user.role)) {
+                if (option.adminOnly && user && !['super_admin', 'admin'].includes(user.role ?? '')) {
                   return null;
                 }
                 const IconComponent = option.icon;
@@ -127,7 +127,7 @@ export default function TBOUserNavbar() {
                     <div className="py-2">
                       {menuOptions.map((option) => {
                         // Filter admin-only options
-                        if (option.adminOnly && user && !['super_admin', 'admin'].includes(user.role)) {
+                        if (option.adminOnly && user && !['super_admin', 'admin'].includes(user.role ?? '')) {
                           return null;
                         }
                         const IconComponent = option.icon;

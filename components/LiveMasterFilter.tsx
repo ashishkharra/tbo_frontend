@@ -1,21 +1,15 @@
-// LiveMasterFilter.tsx
 "use client";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+
+import { usePathname, useRouter } from "next/navigation";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   ChevronDown,
   Search,
-  Play,
   RefreshCw,
-  LayoutDashboard,
-  ListChecks,
-  Settings as SettingsIcon,
-  Import as ImportIcon,
-  Printer as PrinterIcon,
-  FileText as FileTextIcon,
 } from "lucide-react";
 import { volterListMasterFilter, volterMasterFilterGo } from "@/apis/api";
+import { useAuth as useAuthContext } from "@/contexts/AuthContext";
 
 interface SearchableSelectProps {
   value: string;
@@ -27,6 +21,21 @@ interface SearchableSelectProps {
   id: string;
   activeDropdown: string | null;
   onDropdownToggle: (id: string | null) => void;
+}
+
+interface MenuChildItem {
+  label: string;
+  path?: string;
+  children?: MenuChildItem[];
+}
+
+interface MenuItem {
+  id: string;
+  label: string;
+  path?: string;
+  defaultPath?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children?: MenuChildItem[];
 }
 
 function SearchableSelect({
@@ -68,6 +77,7 @@ function SearchableSelect({
           {label}
         </label>
       )}
+
       <div className="relative">
         <button
           type="button"
@@ -76,17 +86,16 @@ function SearchableSelect({
           className="w-full px-2 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 text-left flex items-center justify-between min-w-0"
         >
           <span
-            className={`${
-              value ? "text-gray-900" : "text-gray-500"
-            } truncate flex-1 min-w-0`}
+            className={`${value ? "text-gray-900" : "text-gray-500"
+              } truncate flex-1 min-w-0`}
           >
             {value || placeholder}
           </span>
+
           <ChevronDown
             size={16}
-            className={`text-gray-400 transition-transform duration-200 flex-shrink-0 ml-1 ${
-              isOpen ? "rotate-180" : ""
-            }`}
+            className={`text-gray-400 transition-transform duration-200 flex-shrink-0 ml-1 ${isOpen ? "rotate-180" : ""
+              }`}
           />
         </button>
 
@@ -96,7 +105,7 @@ function SearchableSelect({
               <div className="relative">
                 <Search
                   size={16}
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
                 />
                 <input
                   type="text"
@@ -108,6 +117,7 @@ function SearchableSelect({
                 />
               </div>
             </div>
+
             <div className="max-h-48 overflow-y-auto">
               {filteredOptions.length > 0 ? (
                 filteredOptions.map((option, index) => {
@@ -116,9 +126,8 @@ function SearchableSelect({
                     <button
                       key={index}
                       onClick={() => handleSelect(optionStr)}
-                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 ${
-                        value === optionStr ? "bg-gray-200 font-semibold" : ""
-                      }`}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 ${value === optionStr ? "bg-gray-200 font-semibold" : ""
+                        }`}
                     >
                       {optionStr}
                     </button>
@@ -137,11 +146,569 @@ function SearchableSelect({
   );
 }
 
-export default function LiveMasterFilter() {
+/* ------------------------- Custom Icons ------------------------- */
+
+const ChevronRightIcon = ({ className = "" }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    className={className}
+  >
+    <path d="M9 6l6 6-6 6" />
+  </svg>
+);
+
+const DashboardIcon = ({ className = "" }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    className={className}
+  >
+    <rect x="3" y="3" width="8" height="8" rx="2" />
+    <rect x="13" y="3" width="8" height="5" rx="2" />
+    <rect x="13" y="10" width="8" height="11" rx="2" />
+    <rect x="3" y="13" width="8" height="8" rx="2" />
+  </svg>
+);
+
+const VoterListIcon = ({ className = "" }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    className={className}
+  >
+    <path d="M8 6h13" />
+    <path d="M8 12h13" />
+    <path d="M8 18h13" />
+    <path d="M3 6h.01" />
+    <path d="M3 12h.01" />
+    <path d="M3 18h.01" />
+  </svg>
+);
+
+const MasterIcon = ({ className = "" }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    className={className}
+  >
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.7 1.7 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.07V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1-.33 1.7 1.7 0 0 0-1.08.39l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.07-.4H2.9a2 2 0 1 1 0-4H3a1.7 1.7 0 0 0 1.6-1.33 1.7 1.7 0 0 0-.39-1.08l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.07V2.9a2 2 0 1 1 4 0V3a1.7 1.7 0 0 0 1.33 1.6 1.7 1.7 0 0 0 1.08-.39l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c0 .38.12.74.33 1 .25.3.4.68.4 1.08V11a2 2 0 1 1 0 4h-.1c-.4 0-.78.15-1.07.4Z" />
+  </svg>
+);
+
+const ImportExportIcon = ({ className = "" }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    className={className}
+  >
+    <path d="M12 3v12" />
+    <path d="M8 7l4-4 4 4" />
+    <path d="M12 21V9" />
+    <path d="M16 17l-4 4-4-4" />
+  </svg>
+);
+
+const PrintIcon = ({ className = "" }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    className={className}
+  >
+    <path d="M6 9V4h12v5" />
+    <rect x="6" y="14" width="12" height="6" rx="2" />
+    <path d="M6 18H4a2 2 0 0 1-2-2v-5a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v5a2 2 0 0 1-2 2h-2" />
+  </svg>
+);
+
+const SettingsIconSvg = ({ className = "" }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    className={className}
+  >
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2v3" />
+    <path d="M12 19v3" />
+    <path d="M4.93 4.93l2.12 2.12" />
+    <path d="M16.95 16.95l2.12 2.12" />
+    <path d="M2 12h3" />
+    <path d="M19 12h3" />
+    <path d="M4.93 19.07l2.12-2.12" />
+    <path d="M16.95 7.05l2.12-2.12" />
+  </svg>
+);
+
+const ReportIcon = ({ className = "" }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    className={className}
+  >
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6" />
+    <path d="M8 13h8" />
+    <path d="M8 17h8" />
+    <path d="M8 9h2" />
+  </svg>
+);
+
+/* ------------------------- Quick Menu ------------------------- */
+
+function FlyoutList({
+  items,
+  onNavigate,
+  level = 0,
+}: {
+  items: MenuChildItem[];
+  onNavigate: (path: string) => void;
+  level?: number;
+}) {
+  const [openChild, setOpenChild] = useState<string | null>(null);
+  const closeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearCloseTimer = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+
+  const scheduleClose = () => {
+    clearCloseTimer();
+    closeTimerRef.current = setTimeout(() => {
+      setOpenChild(null);
+    }, 220);
+  };
+
+  useEffect(() => {
+    return () => clearCloseTimer();
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.96, x: level === 0 ? 0 : -6 }}
+      animate={{ opacity: 1, scale: 1, x: 0 }}
+      exit={{ opacity: 0, scale: 0.96, x: level === 0 ? 0 : -4 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
+      className={`
+        ${level === 0 ? "relative" : "absolute left-full top-0"}
+        min-w-[240px] rounded-2xl border border-white/50 bg-white/95 p-2 backdrop-blur-xl
+        shadow-[0_24px_70px_rgba(15,23,42,0.18)] ring-1 ring-slate-200/70
+        z-[1000000]
+      `}
+      onMouseEnter={clearCloseTimer}
+      onMouseLeave={scheduleClose}
+    >
+      {items.map((child) => {
+        const hasChildren = !!child.children?.length;
+        const childKey = `${level}-${child.label}`;
+
+        return (
+          <div
+            key={childKey}
+            className="relative"
+            onMouseEnter={() => {
+              clearCloseTimer();
+              setOpenChild(childKey);
+            }}
+          >
+            <button
+              onClick={() => {
+                if (hasChildren) return;
+                if (child.path) onNavigate(child.path);
+              }}
+              className="group relative flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition-all duration-200 hover:bg-slate-100 hover:text-slate-900"
+            >
+              <span className="truncate">{child.label}</span>
+              {hasChildren && (
+                <ChevronRightIcon className="h-4 w-4 text-slate-400 group-hover:text-slate-700" />
+              )}
+            </button>
+
+            {hasChildren && openChild === childKey && child.children && (
+              <>
+                <div className="absolute left-full top-0 h-full w-4" />
+                <div
+                  className="absolute left-full top-0 pl-2"
+                  onMouseEnter={clearCloseTimer}
+                  onMouseLeave={scheduleClose}
+                >
+                  <FlyoutList
+                    items={child.children}
+                    onNavigate={onNavigate}
+                    level={level + 1}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </motion.div>
+  );
+}
+
+function QuickMenuPopup({
+  isOpen,
+  onClose,
+  anchorRef,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  anchorRef?: React.RefObject<HTMLElement | null>;
+}) {
   const router = useRouter();
+  const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  const [panelHovered, setPanelHovered] = useState(false);
+  const closeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const menuItems: MenuItem[] = useMemo(
+    () => [
+      {
+        id: "dashboard",
+        label: "Dashboard",
+        path: "/live-voter-list/dashboard",
+        icon: DashboardIcon,
+      },
+      {
+        id: "voterlist",
+        label: "Voterlist",
+        path: "/voter-list",
+        icon: VoterListIcon,
+      },
+      {
+        id: "master",
+        label: "Master",
+        defaultPath: "/voter-list",
+        icon: MasterIcon,
+        children: [
+          { label: "Master Data", path: "/voter-list/master" },
+          { label: "Booth Mapping", path: "/voter-list/booth-maping" },
+          { label: "Live Cast ID Master", path: "/live-voter-list/master/cast-id" },
+        ],
+      },
+      {
+        id: "importExport",
+        label: "Import / Export",
+        defaultPath: "/voter-list/import-data",
+        icon: ImportExportIcon,
+        children: [
+          { label: "Import Data", path: "/voter-list/import-data" },
+          { label: "Export Data", path: "/voter-list/import-data" },
+          { label: "Export Process", path: "/voter-list/import-data" },
+        ],
+      },
+      {
+        id: "print",
+        label: "Print",
+        defaultPath: "/live-voter-list/print-1",
+        icon: PrintIcon,
+        children: [
+          { label: "Print 1", path: "/live-voter-list/print-1" },
+          { label: "Print 2", path: "/live-voter-list/print-2" },
+          { label: "Print 3", path: "/live-voter-list/print-3" },
+        ],
+      },
+      {
+        id: "settings",
+        label: "Settings",
+        path: "/live-voter-list/settings",
+        icon: SettingsIconSvg,
+      },
+      {
+        id: "report",
+        label: "Report",
+        path: "/live-voter-list/report",
+        icon: ReportIcon,
+      },
+      {
+        id: "cast_by_surname",
+        label: "Cast By Surname",
+        path: "/live-voter-list/castbysurname",
+        icon: ReportIcon,
+      },
+    ],
+    []
+  );
+
+  const clearCloseTimer = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+
+  const scheduleClose = () => {
+    clearCloseTimer();
+    closeTimerRef.current = setTimeout(() => {
+      if (!panelHovered) {
+        setHoveredMenu(null);
+        onClose();
+      }
+    }, 220);
+  };
+
+  useEffect(() => {
+    return () => clearCloseTimer();
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const updateRect = () => {
+      if (anchorRef?.current) {
+        setAnchorRect(anchorRef.current.getBoundingClientRect());
+      }
+    };
+
+    updateRect();
+
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setHoveredMenu(null);
+        onClose();
+      }
+    };
+
+    const handleResize = () => updateRect();
+    const handleScroll = () => updateRect();
+
+    document.addEventListener("keydown", handleEsc);
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("scroll", handleScroll, true);
+
+    return () => {
+      document.removeEventListener("keydown", handleEsc);
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [isOpen, onClose, anchorRef]);
+
+  const handleNavigate = (path: string) => {
+    router.push(path);
+    onClose();
+    setHoveredMenu(null);
+  };
+
+  const panelLeft =
+    typeof window !== "undefined" && anchorRect
+      ? Math.min(Math.max(anchorRect.left - 250, 16), window.innerWidth - 980)
+      : 16;
+
+  const panelTop = anchorRect ? anchorRect.bottom + 12 : 72;
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            className="fixed inset-0 z-[999998] bg-slate-950/25 backdrop-blur-md"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22 }}
+            onClick={() => {
+              setHoveredMenu(null);
+              onClose();
+            }}
+          />
+
+          {anchorRect && (
+            <motion.div
+              className="fixed z-[999999] pointer-events-none"
+              style={{
+                top: anchorRect.top + anchorRect.height / 2 - 6,
+                left: anchorRect.left + anchorRect.width / 2 - 6,
+              }}
+              initial={{ opacity: 0, scale: 0.6 }}
+              animate={{ opacity: 0.18, scale: 18 }}
+              exit={{ opacity: 0, scale: 0.6 }}
+              transition={{ duration: 0.32, ease: "easeOut" }}
+            >
+              <div className="h-3 w-3 rounded-full bg-blue-500 blur-[2px]" />
+            </motion.div>
+          )}
+
+          <motion.div
+            className="fixed z-[999999]"
+            style={{
+              top: panelTop,
+              left: "600px",
+              width: "min(980px, calc(100vw - 32px))",
+            }}
+            initial={{
+              opacity: 0,
+              scale: 0.82,
+              y: -20,
+              transformOrigin: anchorRect
+                ? `${Math.max(40, anchorRect.left - panelLeft + 20)}px top`
+                : "right top",
+            }}
+            animate={{
+              opacity: 1,
+              scale: 1,
+              y: 0,
+              transformOrigin: anchorRect
+                ? `${Math.max(40, anchorRect.left - panelLeft + 20)}px top`
+                : "right top",
+            }}
+            exit={{
+              opacity: 0,
+              scale: 0.9,
+              y: -12,
+            }}
+            transition={{
+              type: "spring",
+              stiffness: 320,
+              damping: 26,
+              mass: 0.9,
+            }}
+            onMouseEnter={() => {
+              clearCloseTimer();
+              setPanelHovered(true);
+            }}
+            onMouseLeave={() => {
+              setPanelHovered(false);
+              scheduleClose();
+            }}
+          >
+            <div className="relative overflow-visible rounded-[28px] border border-white/50 bg-white/85 shadow-[0_30px_90px_rgba(15,23,42,0.28)] ring-1 ring-slate-200/60 backdrop-blur-2xl">
+              <div className="absolute inset-0 rounded-[28px] bg-gradient-to-br from-white via-slate-50/95 to-slate-100/80" />
+
+              <div className="relative flex items-center justify-between border-b border-slate-200/70 px-5 py-4 sm:px-6">
+                <div>
+                  <div className="text-[15px] font-semibold text-slate-900">
+                    Quick Navigation
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Hover to open menus smoothly
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setHoveredMenu(null);
+                    onClose();
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white/90 px-3 py-1.5 text-sm font-medium text-slate-600 transition-all duration-200 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="relative max-h-[85vh] overflow-visible p-5 sm:p-6">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {menuItems.map((item) => {
+                    const hasChildren = !!item.children?.length;
+                    const Icon = item.icon;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="relative"
+                        onMouseEnter={() => {
+                          clearCloseTimer();
+                          setHoveredMenu(item.id);
+                        }}
+                        onMouseLeave={() => {
+                          if (!hasChildren) {
+                            scheduleClose();
+                          }
+                        }}
+                      >
+                        <button
+                          onClick={() => {
+                            if (hasChildren) {
+                              if (item.defaultPath) {
+                                handleNavigate(item.defaultPath);
+                              }
+                            } else {
+                              handleNavigate(item.path || item.defaultPath || "#");
+                            }
+                          }}
+                          className="group relative w-full overflow-visible rounded-[22px] border border-slate-200/80 bg-white/85 p-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:bg-white hover:shadow-xl"
+                        >
+                          <div className="absolute inset-0 rounded-[22px] bg-gradient-to-br from-white via-slate-50/80 to-slate-100/70" />
+
+                          <div className="relative flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 text-slate-700 shadow-inner">
+                                <Icon className="h-[18px] w-[18px] text-slate-700" />
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-semibold text-slate-900">
+                                  {item.label}
+                                </div>
+                                <div className="mt-1 text-xs text-slate-500">
+                                  {hasChildren ? "Hover to explore options" : "Open page"}
+                                </div>
+                              </div>
+                            </div>
+
+                            {hasChildren && (
+                              <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition-all duration-200 group-hover:bg-slate-900 group-hover:text-white">
+                                <ChevronRightIcon className="h-4 w-4" />
+                              </div>
+                            )}
+                          </div>
+                        </button>
+
+                        {hasChildren && hoveredMenu === item.id && item.children && (
+                          <>
+                            <div className="absolute left-0 top-full h-4 w-full" />
+                            <div
+                              className="absolute left-0 top-full pt-2"
+                              onMouseEnter={clearCloseTimer}
+                              onMouseLeave={scheduleClose}
+                            >
+                              <FlyoutList items={item.children} onNavigate={handleNavigate} />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/* ------------------------- Main Component ------------------------- */
+
+export default function LiveMasterFilter() {
+  const { logout } = useAuthContext();
+  const router = useRouter();
+  const pathname = usePathname() || "";
+
+  const quickMenuButtonRef = useRef<HTMLButtonElement>(null);
+
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [menuPopupOpen, setMenuPopupOpen] = useState(false);
-  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const [logoutDropdownOpen, setLogoutDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
@@ -164,7 +731,6 @@ export default function LiveMasterFilter() {
   const blockOptions: string[] = [];
   const mandalOptions: string[] = [];
   const kendraOptions: string[] = [];
-  const pathname = usePathname() || "";
 
   useEffect(() => {
     const fetchMasterFilterData = async () => {
@@ -219,6 +785,21 @@ export default function LiveMasterFilter() {
     fetchMasterFilterData();
   }, []);
 
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setActiveDropdown(null);
+        setLogoutDropdownOpen(false);
+        setMenuPopupOpen(false);
+      }
+    };
+
+    document.addEventListener("keydown", handleEscKey);
+    return () => {
+      document.removeEventListener("keydown", handleEscKey);
+    };
+  }, []);
+
   const extractId = (value: string): string => {
     if (!value || value === "All") return "";
     const parts = value.split(" - ");
@@ -249,10 +830,7 @@ export default function LiveMasterFilter() {
       }
 
       const queryString = queryParams.toString();
-      console.log("Calling volterMasterFilterGo with query:", queryString);
-
-      const response = await (volterMasterFilterGo as any)(queryString);
-      console.log("volterMasterFilterGo response:", response);
+      await (volterMasterFilterGo as any)(queryString);
     } catch (error) {
       console.log("Error applying filters:", error);
     } finally {
@@ -273,13 +851,13 @@ export default function LiveMasterFilter() {
 
   const isAnyFilterSelected = Boolean(
     selectedDataId ||
-      selectedPartyDistrict ||
-      selectedDistrict ||
-      selectedAssembly ||
-      selectedParliament ||
-      selectedBlock ||
-      selectedMandal ||
-      selectedKendra
+    selectedPartyDistrict ||
+    selectedDistrict ||
+    selectedAssembly ||
+    selectedParliament ||
+    selectedBlock ||
+    selectedMandal ||
+    selectedKendra
   );
 
   return (
@@ -327,7 +905,7 @@ export default function LiveMasterFilter() {
                     onChange={setSelectedPartyDistrict}
                     options={["All", ...partyDistrictOptions]}
                     placeholder="पार्टी जिला"
-                    label="" // Add this line
+                    label=""
                     activeDropdown={activeDropdown}
                     onDropdownToggle={setActiveDropdown}
                   />
@@ -340,7 +918,7 @@ export default function LiveMasterFilter() {
                     onChange={setSelectedDistrict}
                     options={["All", ...districtOptions]}
                     placeholder="ज़िला"
-                    label="" // Add this line
+                    label=""
                     disabled={loading}
                     activeDropdown={activeDropdown}
                     onDropdownToggle={setActiveDropdown}
@@ -354,7 +932,7 @@ export default function LiveMasterFilter() {
                     onChange={setSelectedAssembly}
                     options={["All", ...assemblyOptions]}
                     placeholder="विधानसभा क्षेत्र"
-                    label="" // Add this line
+                    label=""
                     disabled={loading}
                     activeDropdown={activeDropdown}
                     onDropdownToggle={setActiveDropdown}
@@ -368,7 +946,7 @@ export default function LiveMasterFilter() {
                     onChange={setSelectedParliament}
                     options={["All", ...parliamentOptions]}
                     placeholder="संसदीय क्षेत्र"
-                    label="" // Add this line
+                    label=""
                     disabled={loading}
                     activeDropdown={activeDropdown}
                     onDropdownToggle={setActiveDropdown}
@@ -378,21 +956,21 @@ export default function LiveMasterFilter() {
             )}
 
             <div className="flex items-center gap-1 flex-shrink-0">
+              {/* Existing functionality unchanged */}
               {/* <button
                 onClick={handleApplyFilters}
                 disabled={!isAnyFilterSelected || applying}
                 className={`flex items-center justify-center space-x-0.5 px-2 py-2 rounded-lg font-medium text-sm h-[38px] ${
                   isAnyFilterSelected && !applying
-                    ? 'bg-gray-600 text-white hover:bg-gray-700 cursor-pointer' 
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    ? "bg-gray-600 text-white hover:bg-gray-700 cursor-pointer"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
                 }`}
               >
                 {applying ? (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <Play size={14} />
+                  <span>Go</span>
                 )}
-                <span>Go</span>
               </button> */}
 
               <button
@@ -404,15 +982,19 @@ export default function LiveMasterFilter() {
               </button>
 
               <button
-                onClick={() => setMenuPopupOpen(true)}
+                ref={quickMenuButtonRef}
+                type="button"
+                onMouseEnter={() => setMenuPopupOpen(true)}
+                onClick={() => setMenuPopupOpen((prev) => !prev)}
                 disabled={applying}
-                className="flex items-center justify-center p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200 cursor-pointer h-[48px] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group relative flex items-center justify-center h-[42px] w-[42px] rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-[1px] hover:border-slate-300 hover:bg-white hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <div className="grid grid-cols-2 grid-rows-2 gap-[2px] w-6 h-6">
-                  <span className="block w-full h-full bg-gradient-to-br from-blue-300 to-blue-500"></span>
-                  <span className="block w-full h-full bg-gradient-to-br from-blue-400 to-blue-600"></span>
-                  <span className="block w-full h-full bg-gradient-to-br from-blue-400 to-blue-600"></span>
-                  <span className="block w-full h-full bg-gradient-to-br from-blue-500 to-blue-700"></span>
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-slate-50 via-white to-slate-100 opacity-100" />
+                <div className="relative grid grid-cols-2 grid-rows-2 gap-[3px] w-[18px] h-[18px]">
+                  <span className="block w-full h-full rounded-[4px] bg-gradient-to-br from-blue-300 to-blue-500 shadow-sm"></span>
+                  <span className="block w-full h-full rounded-[4px] bg-gradient-to-br from-blue-400 to-blue-600 shadow-sm"></span>
+                  <span className="block w-full h-full rounded-[4px] bg-gradient-to-br from-blue-400 to-blue-600 shadow-sm"></span>
+                  <span className="block w-full h-full rounded-[4px] bg-gradient-to-br from-blue-500 to-blue-700 shadow-sm"></span>
                 </div>
               </button>
             </div>
@@ -423,6 +1005,7 @@ export default function LiveMasterFilter() {
               <span className="text-sm font-medium text-gray-700 uppercase">
                 ADMIN
               </span>
+
               <button
                 onClick={() => setLogoutDropdownOpen(!logoutDropdownOpen)}
                 className="flex items-center justify-center p-1.5 text-gray-700 hover:text-gray-900 hover:bg-gray-200 rounded-md transition-colors duration-200"
@@ -433,9 +1016,13 @@ export default function LiveMasterFilter() {
               {logoutDropdownOpen && (
                 <div className="absolute top-full right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[120px] z-50">
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setLogoutDropdownOpen(false);
-                      router.push("/login");
+                      try {
+                        await logout();
+                      } catch {
+                        router.push("/login");
+                      }
                     }}
                     className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
                   >
@@ -449,165 +1036,11 @@ export default function LiveMasterFilter() {
         </div>
       </div>
 
-      {menuPopupOpen && (
-        <div
-          className="fixed inset-0 z-[999999] bg-black/70 flex items-center justify-center p-10"
-          onClick={() => {
-            setMenuPopupOpen(false);
-            setOpenSubmenu(null);
-          }}
-        >
-          <div
-            className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[125vh] overflow-visible border border-gray-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
-              <div className="text-sm font-semibold text-gray-800">
-                Quick Navigation
-              </div>
-              <button
-                onClick={() => {
-                  setMenuPopupOpen(false);
-                  setOpenSubmenu(null);
-                }}
-                className="px-2 py-1 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-md transition"
-              >
-                Close
-              </button>
-            </div>
-            <div className="p-4 overflow-auto max-h-[calc(95vh-60px)]">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {[
-                  {
-                    id: "dashboard",
-                    label: "Dashboard",
-                    path: "/live-voter-list/dashboard",
-                    icon: LayoutDashboard,
-                  },
-                  {
-                    id: "voterlist",
-                    label: "Voterlist",
-                    path: "/voter-list",
-                    icon: ListChecks,
-                  },
-                  {
-                    id: "master",
-                    label: "Master",
-                    defaultPath: "/voter-list",
-                    icon: SettingsIcon,
-                    children: [
-                      { label: "Master Data", path: "/voter-list/master" },
-                      {
-                        label: "Booth Mapping",
-                        path: "/voter-list/booth-maping",
-                      },
-                      {
-                        label: "Live Cast ID Master",
-                        path: "/live-voter-list/master/cast-id",
-                      },
-                    ],
-                  },
-                  {
-                    id: "importExport",
-                    label: "Import / Export",
-                    defaultPath: "/voter-list/import-data",
-                    icon: ImportIcon,
-                    children: [
-                      { label: "Import Data", path: "/voter-list/import-data" },
-                      { label: "Export Data", path: "/voter-list/import-data" },
-                      {
-                        label: "Export Process",
-                        path: "/voter-list/import-data",
-                      },
-                    ],
-                  },
-                  {
-                    id: "print",
-                    label: "Print",
-                    defaultPath: "/live-voter-list/print-1",
-                    icon: PrinterIcon,
-                    children: [
-                      { label: "Print 1", path: "/live-voter-list/print-1" },
-                      { label: "Print 2", path: "/live-voter-list/print-2" },
-                      { label: "Print 3", path: "/live-voter-list/print-3" },
-                    ],
-                  },
-                  {
-                    id: "settings",
-                    label: "Settings",
-                    path: "/live-voter-list/settings",
-                    icon: SettingsIcon,
-                  },
-                  {
-                    id: "report",
-                    label: "Report",
-                    path: "/live-voter-list/report",
-                    icon: FileTextIcon,
-                  },
-                ].map((item) => {
-                  const hasChildren = !!item.children?.length;
-
-                  return (
-                    <div key={item.id} className="relative">
-                      <button
-                        onClick={() => {
-                          if (hasChildren) {
-                            setOpenSubmenu(
-                              openSubmenu === item.id ? null : item.id
-                            );
-                          } else {
-                            router.push(item.path || item.defaultPath || "#");
-                          }
-                        }}
-                        className="w-full flex flex-col items-start justify-center px-4 py-3 rounded-lg border bg-white border-gray-200 text-gray-800 hover:bg-gray-50 text-left transition shadow-sm hover:shadow-md"
-                      >
-                        <div className="w-full flex items-start justify-between gap-2">
-                          <span className="flex items-center gap-2 text-sm font-semibold">
-                            {item.icon && (
-                              <item.icon size={16} className="text-gray-600" />
-                            )}
-                            {item.label}
-                          </span>
-                          {hasChildren && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenSubmenu(
-                                  openSubmenu === item.id ? null : item.id
-                                );
-                              }}
-                              className="text-gray-500 hover:text-gray-800 text-lg leading-none px-1"
-                            >
-                              ⋯
-                            </button>
-                          )}
-                        </div>
-                      </button>
-
-                      {hasChildren && openSubmenu === item.id && (
-                        <div className="absolute top-2 right-2 z-10 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[200px]">
-                          <div className="py-1">
-                            {item.children?.map((child) => (
-                              <button
-                                key={child.path}
-                                onClick={() => router.push(child.path)}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 text-gray-800"
-                              >
-                                {child.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <QuickMenuPopup
+        isOpen={menuPopupOpen}
+        onClose={() => setMenuPopupOpen(false)}
+        anchorRef={quickMenuButtonRef}
+      />
     </>
   );
 }

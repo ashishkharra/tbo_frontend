@@ -55,10 +55,12 @@ interface ApiResponse<T = any> {
 interface NewImportExportDataProps {
   onSelectedRowsChange?: (selectedDataIds: string[]) => void;
   onBrowseClick?: () => void;
+  setImportRowClicked?: (value: boolean) => void;
 }
 
 export default function NewImportExportData({
-  onSelectedRowsChange
+  onSelectedRowsChange,
+  setImportRowClicked,
 }: NewImportExportDataProps = {}) {
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
   const [showUploadDialog, setShowUploadDialog] = useState<boolean>(false);
