@@ -16,7 +16,8 @@ import {
   Users,
   Phone,
   Loader2,
-  Copy
+  Copy,
+  ArrowLeft
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -25,14 +26,17 @@ import {
   ApplyPermissionCodeToUser,
   getPermissionModulesApi,
   getTableColumns,
+  getTboUsers,
   getUserPermissions,
   UserPermissionsAssign,
-} from "@/apis/api";
-import {
   GetDataAssignmentOptions,
   SaveUserAssignments,
   GetUserAssignments,
-} from "../../../../apis/api";
+  getUsersRolesApi,
+  addParentChildApi,
+} from "@/apis/api";
+import { useAuth as useAuthContext } from "@/contexts/AuthContext";
+
 
 // ---------- Types ----------
 interface ModuleAction {
@@ -142,6 +146,177 @@ interface AssignmentItem {
   section_names: string | null;
 }
 
+
+const UserDropdown = ({
+  allUsers,
+  optionUsers,
+  userId,
+  onUserChange,
+}: {
+  allUsers: any[];
+  optionUsers?: any[];
+  userId: number | string | null;
+  onUserChange: (userId: string) => void;
+}) => {
+  const usersForOptions =
+    Array.isArray(optionUsers) && optionUsers.length ? optionUsers : allUsers;
+
+  const selectedUser = usersForOptions.find(
+    (u: any) => String(u.id) === String(userId)
+  );
+
+  const optionMap = new Map<string, any>();
+
+  if (selectedUser?.id !== undefined && selectedUser?.id !== null) {
+    optionMap.set(String(selectedUser.id), selectedUser);
+  }
+
+  usersForOptions.forEach((u: any) => {
+    if (u?.id !== undefined && u?.id !== null) {
+      optionMap.set(String(u.id), u);
+    }
+  });
+
+  const finalOptions = Array.from(optionMap.values());
+
+  const options: FilterOption[] = [
+    {
+      value: "",
+      label: "All Users",
+      searchText: "all users",
+    },
+    ...finalOptions.map((user: any) => {
+      const username = capitalizeFirst(String(user?.username || "").trim());
+      const mobile = String(user?.mobile_no || "").trim();
+      const id = String(user?.id || "").trim();
+
+      return {
+        value: id,
+        label: mobile ? `${username} - ${mobile}` : username || id,
+        searchText: `${username} ${mobile} ${id}`.trim(),
+      };
+    }),
+  ];
+
+  return (
+    <SearchableFilterSelect
+      value={String(userId || "")}
+      onChange={onUserChange}
+      options={options}
+      placeholder="All Users"
+      className="min-w-[220px]"
+    />
+  );
+};
+
+const SearchableFilterSelect = ({
+  value,
+  onChange,
+  options,
+  placeholder,
+  disabled,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: FilterOption[];
+  placeholder: string;
+  disabled?: boolean;
+  className?: string;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredOptions = useMemo(() => {
+    const lower = searchTerm.toLowerCase().trim();
+    if (!lower) return options;
+
+    return options.filter((option) =>
+      `${option.label} ${option.searchText || ""}`.toLowerCase().includes(lower)
+    );
+  }, [options, searchTerm]);
+
+  const selectedOption = options.find((opt) => opt.value === value);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false);
+        setSearchTerm("");
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={dropdownRef} className={`relative ${className || ""}`}>
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen((prev) => !prev)}
+        disabled={disabled}
+        className="min-w-[180px] px-3 py-2 rounded border border-gray-300 bg-white text-sm text-gray-700 outline-none flex items-center justify-between gap-2"
+      >
+        <span className="truncate text-left">
+          {selectedOption?.label || placeholder}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 text-gray-500 transition-transform ${open ? "rotate-180" : ""
+            }`}
+        />
+      </button>
+
+      {open && !disabled && (
+        <div className="absolute left-0 top-full z-[1000] mt-1 w-full min-w-[240px] rounded border border-gray-300 bg-white shadow-lg">
+          <div className="border-b border-gray-200 p-2">
+            <div className="relative">
+              <Search className="absolute text-black left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                autoFocus
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by username or number"
+                className="w-full rounded border text-black border-gray-300 py-1.5 pl-8 pr-2 text-xs outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="max-h-56 overflow-y-auto">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                    setSearchTerm("");
+                  }}
+                  className={`block w-full px-3 py-2 text-left text-xs text-black hover:bg-gray-100 ${option.value === value ? "bg-gray-100 font-semibold" : ""
+                    }`}
+                  title={option.label}
+                >
+                  {option.label}
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-xs text-gray-500">
+                No matching option
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ---------- MultiSelect Component ----------
 const MultiSelect = ({
   label,
@@ -184,50 +359,37 @@ const MultiSelect = ({
     return item[nameKey] || "";
   };
 
+  const selectedLabels = selected
+    .map((value) => {
+      const option = options.find((opt) => String(opt[idKey]) === value);
+      return option ? getDisplayName(option) : value;
+    })
+    .filter(Boolean);
+
+  const selectedDisplayText =
+    selected.length === 0
+      ? placeholder || `Select ${label}`
+      : `${selectedLabels.slice(0, 2).join(", ")}${selectedLabels.length > 2 ? ` +${selectedLabels.length - 2} more` : ""}`;
+
   return (
-    <div className="space-y-1.5" ref={ref}>
-      <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">
+    <div className="space-y-0.5" ref={ref}>
+      <label className="text-[8px] font-bold text-gray-700 uppercase tracking-wider">
         {label}
       </label>
-
-      {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-1">
-          {selected.map((value) => {
-            const option = options.find((opt) => String(opt[idKey]) === value);
-            const displayName = option ? getDisplayName(option) : value;
-            return (
-              <span key={`selected-${value}`} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-100 text-blue-800 text-[10px]">
-                <span className="max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap">{displayName}</span>
-                <button
-                  type="button"
-                  onClick={() => onChange(value)}
-                  className="text-blue-700 hover:text-blue-900 font-bold"
-                >
-                  ×
-                </button>
-              </span>
-            );
-          })}
-        </div>
-      )}
 
       <div className="relative">
         <button
           type="button"
-          className={`w-full px-3 py-2 border rounded-lg text-xs font-medium bg-white text-left flex justify-between items-center outline-none focus:ring-2 focus:ring-blue-500/20 transition-all ${disabled ? "bg-gray-50 text-gray-400 cursor-not-allowed" : "hover:border-gray-300"
+          className={`flex h-6 w-full items-center justify-between rounded border bg-white px-2 py-1 text-[10px] font-medium text-left outline-none transition-all focus:ring-2 focus:ring-blue-500/20 ${disabled ? "bg-gray-50 text-gray-400 cursor-not-allowed" : "hover:border-gray-300"
             }`}
           onClick={() => !disabled && setOpen(!open)}
           disabled={disabled}
         >
-          <span className="truncate">
-            {selected.length === 0
-              ? placeholder || `Select ${label}`
-              : `${selected.length} selected`}
-          </span>
-          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+          <span className="truncate">{selectedDisplayText}</span>
+          <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
         </button>
         {open && !disabled && (
-          <div className="absolute z-[1000] fixed mt-1 w-80 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          <div className="absolute z-[1000] fixed mt-1 w-80 bg-white border rounded shadow-lg max-h-60 overflow-y-auto">
             {loading ? (
               <div className="p-2 text-center text-gray-500 text-xs">Loading...</div>
             ) : options.length === 0 ? (
@@ -316,16 +478,77 @@ const getIconForModule = (iconName: string | null, moduleName: string): string =
   return "📁";
 };
 
+const formatRoleLabel = (value: string) =>
+  value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+type FilterOption = {
+  value: string;
+  label: string;
+  searchText?: string;
+};
+
+const capitalizeFirst = (str: string) => {
+  if (!str) return "";
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
+
+const normalizeStatusValue = (value: any) =>
+  String(value ?? "").trim().toLowerCase();
+
+const getUserParentIds = (user: any): string[] => {
+  if (Array.isArray(user?.parents)) {
+    return user.parents
+      .map((parent: any) => String(parent?.id ?? parent?.parent_id ?? "").trim())
+      .filter(Boolean);
+  }
+
+  const directParentId = user?.parent_id ?? user?.p_id;
+  if (directParentId !== undefined && directParentId !== null) {
+    const normalizedParentId = String(directParentId).trim();
+    if (normalizedParentId) {
+      return [normalizedParentId];
+    }
+  }
+
+  return [];
+};
+
+const getParentDisplayName = (user: any) =>
+  String(
+    user?.name ||
+    user?.username ||
+    user?.parent_name ||
+    user?.label ||
+    user?.mobile_no ||
+    user?.id ||
+    ""
+  ).trim();
+
+const capitalizeFirstLetter = (str: any) => {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 // ---------- Main Component ----------
 const TBOUsersSetting = () => {
   const params = useParams();
   const userId: any = params?.id ? Number(params.id) : null;
+  const { user } = useAuthContext()
 
   const [activeTab, setActiveTab] = useState("module_permissions");
 
   const router = useRouter();
-  const handleUserChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newUserId = e.target.value;
+  const handleUserChange = (
+    valueOrEvent: React.ChangeEvent<HTMLSelectElement> | string
+  ) => {
+    const newUserId =
+      typeof valueOrEvent === "string"
+        ? valueOrEvent
+        : valueOrEvent.target.value;
 
     if (!newUserId) return;
 
@@ -362,8 +585,10 @@ const TBOUsersSetting = () => {
 
   const selectedAssignment =
     assignments.find((item) => item.id === selectedAssignmentId) || null;
+  const editingAssignment =
+    assignments.find((item) => item.id === editingAssignmentId) || null;
 
-  const [formData, setFormData] = useState<DataAssignFormData>({
+  const createEmptyAssignmentForm = (): DataAssignFormData => ({
     dbSelect: "",
     wiseType: "",
     dataid: [],
@@ -382,6 +607,18 @@ const TBOUsersSetting = () => {
     check2: false,
   });
 
+  const [teamRoles, setTeamRoles] = useState<any[]>([]);
+  const [teamUsers, setTeamUsers] = useState<any[]>([]);
+  const [teamRole, setTeamRole] = useState("");
+  const [teamUser, setTeamUser] = useState("");
+  const [teamSearch, setTeamSearch] = useState("");
+  const [teamRolesLoading, setTeamRolesLoading] = useState(false);
+  const [teamUsersLoading, setTeamUsersLoading] = useState(false);
+
+  const [formData, setFormData] = useState<DataAssignFormData>(createEmptyAssignmentForm());
+
+
+  const [teamLoading, setTeamLoading] = useState(false);
   const [userData, setUserData] = useState(null);
   const [moduleCode, setModuleCode] = useState("");
   const [permissionCode, setPermissionCode] = useState("");
@@ -402,6 +639,7 @@ const TBOUsersSetting = () => {
   const [saving, setSaving] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [selectedUserFilter, setSelectedUserFilter] = useState("");
+  const [selectedParentFilter, setSelectedParentFilter] = useState("all");
 
   const [copiedCodeMeta, setCopiedCodeMeta] = useState<null | {
     type: "module" | "permission";
@@ -410,6 +648,12 @@ const TBOUsersSetting = () => {
     sourceUsername: string;
     copiedAt: string;
   }>(null);
+
+  const resetAssignmentEditor = () => {
+    setIsAddingData(false);
+    setEditingAssignmentId(null);
+    setFormData(createEmptyAssignmentForm());
+  };
 
   const handleCopy = async (value: string, field: string) => {
     if (!value) return;
@@ -518,9 +762,98 @@ const TBOUsersSetting = () => {
   };
 
   const filteredUsers = allUsers.filter((user) => {
-    if (!selectedRole) return true;
-    return String(user.role_id) === String(selectedRole);
+    if (selectedRole) {
+      const matchedRole = roles.find(
+        (r: any) =>
+          String(r.id) === String(user?.role_id) ||
+          String(r.id) === String(user?.role) ||
+          String(r.name).toLowerCase() === String(user?.role || "").toLowerCase() ||
+          String(r.code).toLowerCase() === String(user?.role || "").toLowerCase()
+      );
+
+      const userRoleId = matchedRole?.id ?? user?.role_id ?? user?.role;
+
+      if (String(userRoleId) !== String(selectedRole)) {
+        return false;
+      }
+    }
+
+    if (selectedUserFilter && selectedUserFilter !== "all") {
+      const normalizedStatus = normalizeStatusValue(user?.status ?? user?.is_active);
+      const isActive = ["active", "1", "true"].includes(normalizedStatus);
+      const isInactive = ["inactive", "0", "false"].includes(normalizedStatus);
+
+      if (selectedUserFilter === "active" && !isActive) return false;
+      if (selectedUserFilter === "inactive" && !isInactive) return false;
+    }
+
+    if (selectedParentFilter !== "all") {
+      const parentIds = getUserParentIds(user);
+      if (!parentIds.includes(String(selectedParentFilter))) {
+        return false;
+      }
+    }
+
+    return true;
   });
+
+  const availableRoles = useMemo(() => {
+    if (roles.length > 0) {
+      return roles.map((role: any) => ({
+        id: String(role.id),
+        name: String(role.name || role.label || role.code || role.id),
+      }));
+    }
+
+    const roleMap = new Map<string, { id: string; name: string }>();
+    allUsers.forEach((user: any) => {
+      const roleValue = String(user?.role_id ?? user?.role ?? "").trim();
+      if (!roleValue || roleMap.has(roleValue)) return;
+
+      roleMap.set(roleValue, {
+        id: roleValue,
+        name: formatRoleLabel(String(user?.role ?? roleValue)),
+      });
+    });
+
+    return Array.from(roleMap.values());
+  }, [roles, allUsers]);
+
+  const parentOptions = useMemo<FilterOption[]>(() => {
+    const parentMap = new Map<string, { label: string; mobile: string; role: string }>();
+
+    allUsers.forEach((user: any) => {
+      const roleValue = String(user?.role || "").toLowerCase();
+      if (!["leader", "coordinator"].includes(roleValue)) return;
+
+      const id = String(user?.id ?? "").trim();
+      const label = capitalizeFirst(getParentDisplayName(user));
+      const mobile = String(user?.mobile_no || "").trim();
+
+      if (id && label && !parentMap.has(id)) {
+        parentMap.set(id, {
+          label,
+          mobile,
+          role: roleValue,
+        });
+      }
+    });
+
+    return [
+      {
+        value: "all",
+        label: "All Parents",
+        searchText: "all parents",
+      },
+      ...Array.from(parentMap.entries())
+        .sort((a, b) => a[1].label.localeCompare(b[1].label))
+        .map(([id, meta]) => ({
+          value: id,
+          label: meta.mobile ? `${meta.label} - ${meta.mobile}` : meta.label,
+          searchText: `${meta.label} ${meta.mobile} ${id} ${meta.role}`.trim(),
+        })),
+    ];
+  }, [allUsers]);
 
   useEffect(() => {
     setMasterTables([
@@ -533,6 +866,47 @@ const TBOUsersSetting = () => {
       { table_name: "db_table", label: "DATA SET" }
     ]);
   }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const fetchTopBarOptions = async () => {
+      try {
+        const res = await getTboUsers({ page: 1, limit: 1000 });
+        const usersData = Array.isArray(res?.data) ? res.data : [];
+
+        if (usersData.length === 0) return;
+
+        setAllUsers(usersData);
+
+        const currentUser = usersData.find(
+          (user: any) => String(user?.id) === String(userId)
+        );
+
+        if (!selectedRole && currentUser) {
+          const nextRole = String(currentUser?.role_id ?? currentUser?.role ?? "").trim();
+          if (nextRole) {
+            setSelectedRole(nextRole);
+          }
+        }
+
+        if (!selectedUserFilter && currentUser) {
+          const normalizedStatus = normalizeStatusValue(
+            currentUser?.status ?? currentUser?.is_active
+          );
+          if (["active", "1", "true"].includes(normalizedStatus)) {
+            setSelectedUserFilter("active");
+          } else if (["inactive", "0", "false"].includes(normalizedStatus)) {
+            setSelectedUserFilter("inactive");
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching top bar options:", error);
+      }
+    };
+
+    fetchTopBarOptions();
+  }, [userId, selectedRole, selectedUserFilter]);
 
   const getSelectedDataIds = (dataid: MultiSelectValue) => {
     if (!Array.isArray(dataid)) return [];
@@ -1050,16 +1424,48 @@ const TBOUsersSetting = () => {
   useEffect(() => {
     if (!userId) return;
     fetchSavedAssignments();
-  }, [userId, selectedRole]);
+  }, [userId]);
 
   const fetchSavedAssignments = async () => {
     try {
-      const res = await GetUserAssignments(userId, selectedRole);
+      const res = await GetUserAssignments(userId, "");
       console.log('res ', res)
       if (!res?.success || !res?.data) return;
 
-      setRoles(Array.isArray(res.data.roles) ? res.data.roles : []);
-      setAllUsers(Array.isArray(res.data.all_users) ? res.data.all_users : []);
+      const rolesData = Array.isArray(res.data.roles) ? res.data.roles : [];
+      if (rolesData.length > 0) {
+        setRoles(rolesData);
+      }
+      const allUsersData = Array.isArray(res.data.all_users) ? res.data.all_users : [];
+      if (allUsersData.length > 0) {
+        setAllUsers(allUsersData);
+      }
+      const currentUser = allUsersData.find((u: any) => u.id === userId);
+      if (!selectedRole) {
+        if (currentUser?.role) {
+          const matchedRole = rolesData.find(
+            (r: any) =>
+              String(r.name).toLowerCase() === String(currentUser.role).toLowerCase() ||
+              String(r.code).toLowerCase() === String(currentUser.role).toLowerCase() ||
+              String(r.id) === String(currentUser.role)
+          );
+          if (matchedRole) {
+            setSelectedRole(String(matchedRole.id));
+          } else if (currentUser?.role_id || currentUser?.role) {
+            setSelectedRole(String(currentUser?.role_id ?? currentUser?.role));
+          }
+        }
+      }
+      if (!selectedUserFilter) {
+        const normalizedStatus = normalizeStatusValue(
+          currentUser?.status ?? currentUser?.is_active
+        );
+        if (["active", "1", "true"].includes(normalizedStatus)) {
+          setSelectedUserFilter("active");
+        } else if (["inactive", "0", "false"].includes(normalizedStatus)) {
+          setSelectedUserFilter("inactive");
+        }
+      }
       setModuleCode(res.data.modules_code ? String(res.data.modules_code) : "");
       setPermissionCode(
         res.data.permission_code ? String(res.data.permission_code) : ""
@@ -1261,6 +1667,38 @@ const TBOUsersSetting = () => {
     }
   }, [activeTab, formData.dbSelect, selectedAssignmentId]);
 
+  useEffect(() => {
+    if (activeTab !== "teams") return;
+
+    const timer = setTimeout(async () => {
+      try {
+        setTeamLoading(true);
+
+        const res = await getUsersRolesApi({
+          search: teamSearch || "",
+          role: teamRole || "",
+          limit: 50,
+        });
+
+        if (res?.success) {
+          setTeamRoles(Array.isArray(res?.data?.roles) ? res.data.roles : []);
+          setTeamUsers(Array.isArray(res?.data?.users) ? res.data.users : []);
+        } else {
+          setTeamRoles([]);
+          setTeamUsers([]);
+        }
+      } catch (error) {
+        console.error("Error fetching team roles/users:", error);
+        setTeamRoles([]);
+        setTeamUsers([]);
+      } finally {
+        setTeamLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [activeTab, teamSearch, teamRole]);
+
   const getAllLeafNodes = (nodes: UIModuleNode[]): UIModuleNode[] => {
     let result: UIModuleNode[] = [];
 
@@ -1374,6 +1812,32 @@ const TBOUsersSetting = () => {
       return id;
     });
     return labels.join(", ");
+  };
+
+  const getDataIdOptionLabel = (opt: any): string => {
+    const id = opt?.data_id ?? opt?.id ?? "";
+    const name = opt?.data_id_name_hi || opt?.data_id_name || opt?.name || "";
+    return name ? `${name} - ${id}` : String(id);
+  };
+
+  const getEditingDataIdFallbackLabel = (): string => {
+    const currentDataId = formData.dataid?.[0];
+    if (!currentDataId) return "";
+
+    const matched = dataIdOptions.find(
+      (opt) => String(opt.data_id) === String(currentDataId)
+    );
+    if (matched) return getDataIdOptionLabel(matched);
+
+    if (editingAssignment?.dataidLabel?.trim()) {
+      return editingAssignment.dataidLabel;
+    }
+
+    if (editingAssignment?.data_id_name_hi?.trim()) {
+      return `${editingAssignment.data_id_name_hi} - ${currentDataId}`;
+    }
+
+    return String(currentDataId);
   };
 
   // Generate display label for multiple selected items (comma-separated)
@@ -1542,25 +2006,7 @@ const TBOUsersSetting = () => {
     }
 
     // Reset form
-    setIsAddingData(false);
-    setFormData({
-      dbSelect: "",
-      wiseType: "",
-      dataid: [],
-      block: [],
-      gp: [],
-      gram: [],
-      ac: [],
-      bhag: [],
-      section: [],
-      mandal: [],
-      kendra: [],
-      ageFrom: "",
-      ageTo: "",
-      cast: [],
-      check1: false,
-      check2: false,
-    });
+    resetAssignmentEditor();
   };
 
   const handleSaveUserAssignments = async () => {
@@ -1624,6 +2070,27 @@ const TBOUsersSetting = () => {
   };
 
   const handleEditAssignment = (item: AssignmentItem) => {
+    if (item.dataid?.length) {
+      setDataIdOptions((prev) => {
+        const next = [...prev];
+
+        item.dataid.forEach((id) => {
+          const exists = next.some(
+            (opt) => String(opt.data_id) === String(id)
+          );
+
+          if (!exists) {
+            next.push({
+              data_id: id,
+              data_id_name_hi: item.data_id_name_hi || "",
+            });
+          }
+        });
+
+        return next;
+      });
+    }
+
     setEditingAssignmentId(item.id);
     setIsAddingData(true);
     setFormData({
@@ -2255,7 +2722,7 @@ const TBOUsersSetting = () => {
           <p className="text-gray-500 text-sm">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
           >
             Retry
           </button>
@@ -2268,13 +2735,13 @@ const TBOUsersSetting = () => {
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
       {/* Top Bar */}
-      <div className="px-6 py-2">
-        <div className="bg-white rounded-xl shadow-sm border px-6 py-2">
+      <div className="px-6 py-1">
+        <div className="bg-white rounded shadow-sm border px-6 py-1">
           <div className="grid grid-cols-3 items-center">
             <div className="flex justify-start">
-              <div className="text-gray-600 hover:text-blue-600 cursor-pointer p-1.5 bg-gray-50 rounded-lg transition-colors">
-                <Link href="/">
-                  <Home size={20} />
+              <div className="text-gray-600 hover:text-blue-600 cursor-pointer p-1.5 bg-gray-50 rounded transition-colors">
+                <Link href="/tbo-users">
+                  <ArrowLeft size={20} />
                 </Link>
               </div>
             </div>
@@ -2282,31 +2749,33 @@ const TBOUsersSetting = () => {
               <select
                 value={selectedRole}
                 onChange={(e) => setSelectedRole(e.target.value)}
-                className="min-w-[160px] px-4 py-2 rounded-xl border border-gray-300 bg-white text-sm text-gray-700 outline-none"
+                className="min-w-[160px] px-3 py-2 rounded border border-gray-300 bg-white text-sm text-gray-700 outline-none"
               >
                 <option value="">All Roles</option>
-                {roles.map((role) => (
+                {availableRoles.map((role) => (
                   <option key={role.id} value={role.id}>
                     {role.name}
                   </option>
                 ))}
               </select>
-              <select className="px-3 py-1.5 border border-gray-200 rounded-lg text-[13px] text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white font-medium">
-                <option value="all">All Parents</option>
-              </select>
+              <SearchableFilterSelect
+                value={selectedParentFilter}
+                onChange={setSelectedParentFilter}
+                options={parentOptions}
+                placeholder="All Parents"
+                className="min-w-[220px]"
+              />
+              <UserDropdown
+                allUsers={allUsers}
+                optionUsers={filteredUsers.length ? filteredUsers : allUsers}
+                userId={userId}
+                onUserChange={handleUserChange}
+              />
               <select
-                className="min-w-[160px] px-4 text-black py-2 rounded-xl border border-gray-300 bg-white text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                value={String(userId || "")}
-                onChange={handleUserChange}
+                className="min-w-[160px] px-3 py-2 rounded border border-gray-300 bg-white text-sm text-gray-700 outline-none"
+                value={selectedUserFilter || "all"}
+                onChange={(e) => setSelectedUserFilter(e.target.value)}
               >
-                <option value="">All Users</option>
-                {allUsers.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.username}
-                  </option>
-                ))}
-              </select>
-              <select className="px-3 py-1.5 border border-gray-200 rounded-lg text-[13px] text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white font-medium">
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
@@ -2318,8 +2787,8 @@ const TBOUsersSetting = () => {
       </div>
 
       {/* Tabs */}
-      <div className="mt-4">
-        <div className="flex items-center gap-4 px-6 overflow-x-auto no-scrollbar">
+      <div className="flex justify-between px-6 mt-1">
+        <div className="flex items-center gap-4 overflow-x-auto no-scrollbar">
           {[
             { id: "module_permissions", label: "Module & Permissions" },
             { id: "data_assign", label: "Data Assign & Column Permission" },
@@ -2329,7 +2798,7 @@ const TBOUsersSetting = () => {
             <div
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-1 text-[13px] font-medium rounded whitespace-nowrap shadow-sm cursor-pointer transition-all ${activeTab === tab.id
+              className={`px-4 py-2 text-[14px] font-medium rounded whitespace-nowrap shadow-sm cursor-pointer transition-all ${activeTab === tab.id
                 ? "text-white bg-black"
                 : "text-white bg-gray-700 hover:bg-gray-800"
                 }`}
@@ -2338,117 +2807,113 @@ const TBOUsersSetting = () => {
             </div>
           ))}
         </div>
-      </div>
 
-      <div className="mb-2 mx-6 mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-          {/* Left side */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="text-xs font-semibold text-slate-800">
-              Access Pair
-            </div>
-
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border
-          ${moduleCode && permissionCode
-                  ? "border-green-200 bg-green-50 text-green-700"
-                  : "border-amber-200 bg-amber-50 text-amber-700"
-                }`}
-            >
-              {moduleCode && permissionCode
-                ? "Paste both module code and permission code to assign permissions."
-                : "Both codes required"}
-            </span>
-          </div>
-
-          {/* Right side */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Module */}
-            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
-              <span className="text-[11px] font-medium text-slate-600">M</span>
-              <input
-                value={moduleCode || ""}
-                readOnly
-                placeholder="Module code"
-                className="h-7 w-[120px] bg-transparent text-xs font-mono text-slate-700 outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => handleCopy(moduleCode, "module")}
-                className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                title="Copy module code"
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={handlePasteModuleCode}
-                className={`h-7 rounded-md border px-2 text-[11px] font-medium transition-all
-            ${copiedField === "module_paste"
-                    ? "border-blue-300 bg-blue-50 text-blue-700"
-                    : "border-blue-200 bg-white text-blue-600 hover:bg-blue-50"
-                  }`}
-              >
-                Paste
-              </button>
-            </div>
-
-            {/* Permission */}
-            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
-              <span className="text-[11px] font-medium text-slate-600">P</span>
-              <input
-                value={permissionCode || ""}
-                readOnly
-                placeholder="Permission code"
-                className="h-7 w-[100px] bg-transparent text-xs font-mono text-slate-700 outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => handleCopy(permissionCode, "permission")}
-                className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                title="Copy permission code"
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={handlePastePermissionCode}
-                className={`h-7 rounded-md border px-2 text-[11px] font-medium transition-all
-            ${copiedField === "permission_paste"
-                    ? "border-blue-300 bg-blue-50 text-blue-700"
-                    : "border-blue-200 bg-white text-blue-600 hover:bg-blue-50"
-                  }`}
-              >
-                Paste
-              </button>
-            </div>
-
-            {/* Apply Both */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Module */}
+          <div className="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-1">
+            <span className="text-[11px] font-medium text-slate-600">M</span>
+            <input
+              value={moduleCode || ""}
+              readOnly
+              placeholder="Module code"
+              className="h-7 w-[120px] bg-transparent text-[14px] font-mono text-slate-700 outline-none"
+            />
             <button
               type="button"
-              onClick={handleApplyBothCodes}
-              disabled={!bothCodesReady || saving}
-              className={`h-8 rounded-lg px-3 text-xs font-semibold transition-all
-    ${!bothCodesReady || saving
-                  ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400"
-                  : "border border-slate-900 bg-slate-900 text-white hover:bg-slate-800"
+              onClick={() => handleCopy(moduleCode, "module")}
+              className="flex h-7 w-7 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+              title="Copy module code"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handlePasteModuleCode}
+              className={`h-7 rounded border px-2 text-[11px] font-medium transition-all
+            ${copiedField === "module_paste"
+                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                  : "border-blue-200 bg-white text-blue-600 hover:bg-blue-50"
                 }`}
             >
-              {saving ? "Applying..." : "Apply Both Codes"}
+              Paste
             </button>
           </div>
+
+          {/* Permission */}
+          <div className="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-1">
+            <span className="text-[11px] font-medium text-slate-600">P</span>
+            <input
+              value={permissionCode || ""}
+              readOnly
+              placeholder="Permission code"
+              className="h-7 w-[100px] bg-transparent text-[14px] font-mono text-slate-700 outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => handleCopy(permissionCode, "permission")}
+              className="flex h-7 w-7 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+              title="Copy permission code"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handlePastePermissionCode}
+              className={`h-7 rounded border px-2 text-[11px] font-medium transition-all
+            ${copiedField === "permission_paste"
+                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                  : "border-blue-200 bg-white text-blue-600 hover:bg-blue-50"
+                }`}
+            >
+              Paste
+            </button>
+          </div>
+
+          {/* Apply Both */}
+          <button
+            type="button"
+            onClick={handleApplyBothCodes}
+            disabled={!bothCodesReady || saving}
+            className={`h-8 rounded px-3 text-[14px] transition-all
+    ${!bothCodesReady || saving
+                ? "cursor-not-allowed bg-purple-100-100 text-slate-400"
+                : "bg-purple-600 cursor-pointer text-white hover:bg-purple-800"
+              }`}
+          >
+            {saving ? "Applying..." : "Apply Both Codes"}
+          </button>
         </div>
       </div>
+
 
       {/* Module & Permissions Tab */}
       {activeTab === "module_permissions" && (
         <div className="px-6 mt-3 pb-2">
-          <div className="bg-white rounded-xl shadow-lg border w-full h-[calc(100vh-165px)] flex flex-col overflow-hidden uppercase">
-            <div className="px-6 py-3 border-b bg-gray-50 flex items-center flex-shrink-0">
-              <div className="w-[30%] min-w-[200px]">
-                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+          <div className="bg-white rounded shadow-lg border w-full h-[calc(100vh-130px)] flex flex-col overflow-hidden uppercase">
+            <div className="px-6 py-2 border-b bg-gray-50 flex items-center flex-shrink-0">
+              <div className="w-[100%] min-w-[200px] flex justify-between">
+                <h4 className="text-[13px] font-bold text-gray-500 uppercase tracking-widest">
                   Modules / Menus
                 </h4>
+
+                <div className="border-t bg-transparent flex items-center justify-end flex-shrink-0 gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                  <button className="px-6 py-1.5 text-[13px] font-bold text-white bg-yellow-600 hover:bg-yellow-800 cursor-pointer shadow-sm rounded transition-all flex items-center gap-2">
+                    <RotateCcw className="w-4 h-4" /> Default
+                  </button>
+
+                  <button
+                    onClick={handleSavePermissions}
+                    disabled={isSavingPermissions}
+                    className="px-6 py-1.5 text-[13px] font-bold text-white bg-green-600 hover:bg-green-800 cursor-pointer shadow-sm rounded transition-all flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {isSavingPermissions ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Database className="w-4 h-4" />
+                    )}
+                    {isSavingPermissions ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
               </div>
               <div className="flex-1"></div>
             </div>
@@ -2464,69 +2929,40 @@ const TBOUsersSetting = () => {
                 )}
               </div>
             </div>
-
-            <div className="py-2.5 px-6 border-t bg-white flex items-center justify-end flex-shrink-0 gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-              <button className="px-6 py-1.5 text-[14px] font-bold text-white bg-[#405169] hover:bg-[#344458] shadow-sm rounded-lg transition-all flex items-center gap-2">
-                <RotateCcw className="w-4 h-4" /> Default
-              </button>
-
-              <button
-                onClick={handleSavePermissions}
-                disabled={isSavingPermissions}
-                className="px-6 py-1.5 text-[14px] font-bold text-white bg-[#405169] hover:bg-[#344458] shadow-sm rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
-              >
-                {isSavingPermissions ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Database className="w-4 h-4" />
-                )}
-                {isSavingPermissions ? "Saving..." : "Save Changes"}
-              </button>
-            </div>
           </div>
         </div>
       )}
 
       {/* Data Assign & Column Permission Tab */}
       {activeTab === "data_assign" && (
-        <div className="px-6 mt-3 pb-6">
-          <div className="flex gap-6 h-[calc(100vh-165px)]">
+        <div className="px-6 mt-2 pb-3">
+          <div className="flex gap-6 h-[calc(100vh-118.9px)]">
             {/* Left Column: Data Assign */}
-            <div className="w-1/2 bg-white rounded-xl shadow-lg border flex flex-col overflow-hidden w-[600px]">
-              <div className="px-6 py-3 border-b bg-gray-50 flex items-center justify-between flex-shrink-0">
+            <div className="w-1/2 bg-white rounded shadow-lg border flex flex-col overflow-hidden w-[600px]">
+              <div className="px-6 py-1 border-b bg-gray-50 flex items-center justify-between flex-shrink-0">
                 <h4 className="text-xs font-bold text-black uppercase tracking-widest">Data Assign</h4>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={handleSaveUserAssignments}
-                    className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors shadow-sm cursor-pointer"
-                    title="Save All"
-                  >
-                    <span className="flex items-center justify-center gap-2">
-                      <Save size={18} />
-                      <p>Save</p>
-                    </span>
-                  </button>
-                  <button
                     onClick={() => setIsAddingData(prev => !prev)}
-                    className="flex items-center gap-2 px-3 py-1 cursor-pointer bg-gray-800 text-white rounded-lg hover:bg-black transition shadow-sm"
+                    className="flex items-center gap-2 px-3 py-1 text-[16px] cursor-pointer bg-green-600 text-white rounded hover:bg-green-800 transition shadow-sm"
                     title="Add Permission"
                   >
                     <span className="text-lg font-semibold">+</span>
-                    <span className="text-sm font-medium">Add Permission</span>
+                    <span className="font-medium">Data Assign</span>
                   </button>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
                 {isAddingData && (
-                  <div className="bg-gray-50 text-black rounded-xl border-2 border-dashed border-gray-200 py-1 px-6 mb-6 animate-in fade-in slide-in-from-top-4 duration-300">
-                    <div className="grid grid-cols-3 gap-4">
+                  <div className="mb-1 rounded border border-dashed border-gray-200 bg-gray-50 px-2 text-black animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className="grid grid-cols-1 gap-1 md:grid-cols-2 xl:grid-cols-3">
                       {/* DB SELECT */}
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">
+                      <div className="space-y-0.3">
+                        <label className="text-[8px] font-bold text-gray-700 uppercase tracking-wider">
                           DB SELECT
                         </label>
                         <select
-                          className="w-full px-3 py-2 border rounded-lg text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-blue-500/20"
+                          className="h-6 w-full rounded border bg-white px-2 py-1 text-[10px] font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
                           value={formData.dbSelect}
                           onChange={(e) =>
                             setFormData({
@@ -2545,10 +2981,10 @@ const TBOUsersSetting = () => {
                       </div>
 
                       {/* WISE TYPE */}
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">WISE TYPE</label>
+                      <div className="space-y-0.5">
+                        <label className="text-[8px] font-bold text-gray-700 uppercase tracking-wider">WISE TYPE</label>
                         <select
-                          className="w-full px-3 py-2 border rounded-lg text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-blue-500/20"
+                          className="h-6 w-full rounded border bg-white px-2 py-1 text-[10px] font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
                           value={formData.wiseType}
                           onChange={(e) =>
                             setFormData({
@@ -2583,8 +3019,8 @@ const TBOUsersSetting = () => {
 
                       {/* DATA ID */}
                       {formData.dbSelect && formData.wiseType && (
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">DATA ID</label>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-bold text-gray-700 uppercase tracking-wider">DATA ID</label>
                           {formData.wiseType === "dataid" ? (
                             <MultiSelect
                               label="Data ID"
@@ -2599,7 +3035,7 @@ const TBOUsersSetting = () => {
                             />
                           ) : (
                             <select
-                              className="w-43 px-3 py-2 border rounded-lg text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-blue-500/20"
+                              className="w-full rounded border bg-white px-2.5 py-1 text-[11px] font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
                               value={formData.dataid[0] || ""}
                               disabled={loadingDataOptions || !formData.dbSelect || !formData.wiseType}
                               onChange={(e) =>
@@ -2618,9 +3054,14 @@ const TBOUsersSetting = () => {
                               }
                             >
                               <option className="w-80 z-[1000]" value="">{loadingDataOptions ? "Loading..." : "Select Data ID"}</option>
+                              {formData.dataid[0] && !dataIdOptions.some((opt) => String(opt.data_id) === String(formData.dataid[0])) && (
+                                <option value={formData.dataid[0]}>
+                                  {getEditingDataIdFallbackLabel()}
+                                </option>
+                              )}
                               {dataIdOptions.map((opt) => (
                                 <option key={opt.data_id} value={opt.data_id}>
-                                  {opt.data_id_name_hi} - {opt.data_id}
+                                  {getDataIdOptionLabel(opt)}
                                 </option>
                               ))}
                             </select>
@@ -2650,7 +3091,7 @@ const TBOUsersSetting = () => {
                           <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">Block</label>
                             <select
-                              className="w-full px-3 py-2 border rounded-lg text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-blue-500/20"
+                              className="w-full px-3 py-2 border rounded text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-blue-500/20"
                               value={formData.block[0] || ""}
                               disabled={loadingDataOptions || !formData.dataid.length}
                               onChange={(e) =>
@@ -2691,7 +3132,7 @@ const TBOUsersSetting = () => {
                           <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">Block</label>
                             <select
-                              className="w-full px-3 py-2 border rounded-lg text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-blue-500/20"
+                              className="w-full px-3 py-2 border rounded text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-blue-500/20"
                               value={formData.block[0] || ""}
                               disabled={loadingDataOptions || !formData.dataid.length}
                               onChange={(e) =>
@@ -2714,7 +3155,7 @@ const TBOUsersSetting = () => {
                           <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">GP / Ward</label>
                             <select
-                              className="w-full px-3 py-2 border rounded-lg text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-blue-500/20"
+                              className="w-full rounded border bg-white px-2.5 py-1 text-[11px] font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
                               value={formData.gp[0] || ""}
                               disabled={loadingDataOptions || !formData.dataid.length || formData.block.length !== 1}
                               onChange={(e) =>
@@ -2770,7 +3211,7 @@ const TBOUsersSetting = () => {
                           <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">Bhag</label>
                             <select
-                              className="w-full px-3 py-2 border rounded-lg text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-blue-500/20"
+                              className="w-full rounded border bg-white px-2.5 py-1 text-[11px] font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
                               value={formData.bhag[0] || ""}
                               disabled={loadingDataOptions || !formData.dataid.length}
                               onChange={(e) =>
@@ -2827,7 +3268,7 @@ const TBOUsersSetting = () => {
                           <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">Mandal</label>
                             <select
-                              className="w-full px-3 py-2 border rounded-lg text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-blue-500/20"
+                              className="w-full rounded border bg-white px-2.5 py-1 text-[11px] font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
                               value={formData.mandal[0] || ""}
                               disabled={loadingDataOptions || !formData.dataid.length}
                               onChange={(e) =>
@@ -2864,24 +3305,24 @@ const TBOUsersSetting = () => {
 
                       {/* AGE & CAST FILTERS - Available for All Wise Types */}
                       {formData.dbSelect && formData.wiseType && formData.dataid.length && (
-                        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg col-span-3">
-                          <div className="grid grid-cols-3 gap-4">
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">Age From</label>
+                        <div className="rounded border border-blue-200 bg-blue-50 p-1 md:col-span-2 xl:col-span-3">
+                          <div className="grid grid-cols-1 gap-1.5 md:grid-cols-3">
+                            <div className="space-y-0.5">
+                              <label className="text-[8px] font-bold text-gray-700 uppercase tracking-wider">Age From</label>
                               <input
                                 type="number"
                                 placeholder="0"
-                                className="w-full px-3 py-2 border rounded-lg text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-blue-500/20"
+                                className="h-6 w-full rounded border bg-white px-2 text-[10px] font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
                                 value={formData.ageFrom}
                                 onChange={(e) => setFormData({ ...formData, ageFrom: e.target.value })}
                               />
                             </div>
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold text-gray-700 uppercase tracking-wider">Age To</label>
+                            <div className="space-y-0.5">
+                              <label className="text-[8px] font-bold text-gray-700 uppercase tracking-wider">Age To</label>
                               <input
                                 type="number"
                                 placeholder="100"
-                                className="w-full px-3 py-2 border rounded-lg text-xs font-medium bg-white outline-none focus:ring-2 focus:ring-blue-500/20"
+                                className="h-6 w-full rounded border bg-white px-2 py-1 text-[10px] font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
                                 value={formData.ageTo}
                                 onChange={(e) => setFormData({ ...formData, ageTo: e.target.value })}
                               />
@@ -2903,12 +3344,19 @@ const TBOUsersSetting = () => {
                         </div>
                       )}
 
-                      <div className="mt-5 flex justify-end">
+                      <div className="mt-0.5 col-span-full flex justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={resetAssignmentEditor}
+                          className="rounded border border-gray-300 bg-white px-2.5 py-0.5 text-[10px] font-semibold text-gray-700 transition-all hover:bg-gray-100"
+                        >
+                          Cancel
+                        </button>
                         <button
                           onClick={handleAddAssignment}
-                          className="px-6 bg-blue-600 py-2 text-white text-[12px] font-bold rounded-lg hover:bg-blue-700 transition-all shadow-md flex items-center gap-2"
+                          className="flex items-center gap-1.5 rounded bg-green-600 px-3 py-1 text-[11px] font-bold text-white transition-all hover:bg-green-700 shadow-sm"
                         >
-                          <Check size={14} /> {editingAssignmentId !== null ? "Update" : "Save"}
+                          <Check size={13} /> {editingAssignmentId !== null ? "Update" : "Save"}
                         </button>
                       </div>
                     </div>
@@ -2916,10 +3364,10 @@ const TBOUsersSetting = () => {
                 )}
 
                 {/* List of existing assignments */}
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {assignments.length === 0 ? (
-                    <div className="text-center py-20 bg-gray-50/50 rounded-xl border border-dashed flex flex-col items-center">
-                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 mb-3">
+                    <div className="text-center py-20 bg-gray-50/50 rounded border border-dashed flex flex-col items-center">
+                      <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center text-gray-500 mb-3">
                         <Settings size={24} />
                       </div>
                       <p className="text-sm font-bold text-gray-600 uppercase tracking-wider">No assignments yet</p>
@@ -2973,58 +3421,58 @@ const TBOUsersSetting = () => {
                             setSelectedColumnDB(item.selectedColumnDB || item.dbSelect);
                             setColumnPermissions(item.columnPermissions || {});
                           }}
-                          className={`relative cursor-pointer rounded-xl border bg-white px-4 py-3 shadow-sm transition-all duration-200 group hover:shadow-md ${selectedAssignmentId === item.id
+                          className={`relative cursor-pointer rounded border bg-white px-3 py-2 shadow-sm transition-all duration-200 group hover:shadow-md ${selectedAssignmentId === item.id
                             ? "border-blue-500 ring-2 ring-blue-100"
                             : "border-gray-200 hover:border-gray-300"
                             }`}
                         >
-                          <div className="flex items-start justify-between gap-3 pr-20">
+                          <div className="flex items-start justify-between gap-2 pr-16">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-700">
+                                <span className="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-blue-700">
                                   {item.wiseType} Wise Assignment
                                 </span>
                               </div>
 
-                              <h3 className="mt-2 text-sm font-semibold text-gray-900 truncate">
+                              <h3 className="mt-1 text-[13px] font-semibold text-gray-900 truncate">
                                 {getDataIdLabel(item) || "Assignment"}
                               </h3>
                             </div>
 
                             <div className="shrink-0 text-right">
-                              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                              <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
                                 Database
                               </p>
-                              <span className="mt-1 inline-flex rounded-md bg-gray-50 px-2 py-1 text-[12px] font-medium text-gray-700 border border-gray-200">
+                              <span className="mt-0.5 inline-flex rounded bg-gray-50 px-1.5 py-0.5 text-[11px] font-medium text-gray-700 border border-gray-200">
                                 {item.dbSelect || "-"}
                               </span>
                             </div>
                           </div>
 
-                          <div className="mt-3 grid grid-cols-2 gap-2">
+                          <div className="mt-2 grid grid-cols-2 lg:grid-cols-3 gap-1.5">
                             {summaryRows.map((row, idx) => (
                               <div
                                 key={idx}
-                                className="min-w-0 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2"
+                                className="min-w-0 rounded border border-gray-200 bg-gray-50 px-2 py-1.5"
                               >
-                                <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-500">
+                                <p className="text-[8px] font-semibold uppercase tracking-wide text-gray-500">
                                   {row.label}
                                 </p>
-                                <p className="mt-0.5 text-[12px] font-medium text-gray-800 leading-4 break-words line-clamp-2">
+                                <p className="mt-0.5 text-[11px] font-medium text-gray-800 leading-3.5 break-words line-clamp-2">
                                   {row.value || "-"}
                                 </p>
                               </div>
                             ))}
                           </div>
 
-                          <div className="absolute top-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                          <div className="absolute top-2 right-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleEditAssignment(item);
                               }}
-                              className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                              className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
                             >
                               Edit
                             </button>
@@ -3035,7 +3483,7 @@ const TBOUsersSetting = () => {
                                 e.stopPropagation();
                                 setAssignments(assignments.filter((a) => a.id !== item.id));
                               }}
-                              className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 hover:border-red-200 hover:bg-red-50 hover:text-red-500 transition-all"
+                              className="flex h-7 w-7 items-center justify-center rounded border border-gray-200 bg-white text-gray-500 hover:border-red-200 hover:bg-red-50 hover:text-red-500 transition-all"
                             >
                               <X size={14} />
                             </button>
@@ -3049,8 +3497,8 @@ const TBOUsersSetting = () => {
             </div>
 
             {/* Right Column: Column Permissions */}
-            <div className="w-1/2 bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden w-[60%]">
-              <div className="px-5 py-3 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white flex items-center justify-between flex-shrink-0">
+            <div className="w-1/2 bg-white rounded border border-gray-200 shadow-sm flex flex-col overflow-hidden w-[60%]">
+              <div className="px-5 py-1 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white flex items-center justify-between flex-shrink-0">
                 <div className="min-w-0">
                   <h4 className="text-[11px] font-semibold text-gray-800 uppercase tracking-[0.18em]">
                     Column Permissions
@@ -3068,8 +3516,40 @@ const TBOUsersSetting = () => {
                   )}
                 </div>
 
+                <div className="flex-1 ml-8">
+                  <label className="block text-[10px] font-medium mb-0.5 text-gray-800">
+                    Select Database
+                  </label>
+                  <select
+                    className="w-48 max-w-xs px-3 py-1.5 border border-gray-200 rounded text-xs font-medium bg-white text-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+                    value={selectedColumnDB}
+                    onChange={(e) => setSelectedColumnDB(e.target.value)}
+                  >
+                    <option value="">Select Database</option>
+                    {columnTableOptions.map((item) => (
+                      <option
+                        key={item.table_name}
+                        value={normalizeTableName(item.table_name)}
+                      >
+                        {item.label || item.table_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <button
-                  className="px-3 py-2.5 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-900 text-white text-[11px] font-semibold hover:bg-black transition-all shadow-sm"
+                  onClick={handleSaveUserAssignments}
+                  className="p-1.5 text-white mr-2 bg-green-600 rounded hover:bg-green-800 transition-colors shadow-sm cursor-pointer"
+                  title="Save All"
+                >
+                  <span className="flex items-center justify-center gap-2">
+                    <Save size={18} />
+                    <p>Save</p>
+                  </span>
+                </button>
+
+                <button
+                  className="px-3 py-1.5 flex items-center gap-2 rounded border border-gray-200 bg-yellow-600 text-white text-[16px] hover:bg-black transition-all shadow-sm"
                   onClick={() => {
                     const resetPermissions: Record<
                       string,
@@ -3101,33 +3581,10 @@ const TBOUsersSetting = () => {
                 )}
               </div>
 
-              <div className="bg-white border-b border-gray-200 flex items-end justify-between gap-4 p-3">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium mb-1 text-gray-800">
-                    Select Database
-                  </label>
-                  <select
-                    className="w-full max-w-md px-3 py-2.5 border border-gray-200 rounded-xl text-xs font-medium bg-white text-gray-800 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
-                    value={selectedColumnDB}
-                    onChange={(e) => setSelectedColumnDB(e.target.value)}
-                  >
-                    <option value="">Select Database</option>
-                    {columnTableOptions.map((item) => (
-                      <option
-                        key={item.table_name}
-                        value={normalizeTableName(item.table_name)}
-                      >
-                        {item.label || item.table_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
               <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {!selectedColumnDB ? (
                   <div className="text-center py-16 bg-gray-50/60 flex flex-col items-center justify-center">
-                    <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-white border border-gray-200 shadow-sm mb-3">
+                    <div className="flex items-center justify-center w-14 h-14 rounded bg-white border border-gray-200 shadow-sm mb-3">
                       <Shield className="w-6 h-6 text-gray-500" />
                     </div>
                     <p className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Select Database</p>
@@ -3296,21 +3753,24 @@ const TBOUsersSetting = () => {
       {/* Teams Management Tab */}
       {activeTab === "teams" && (
         <div className="px-6 mt-3 pb-2">
-          <div className="bg-white rounded-xl shadow-lg border w-full h-[calc(100vh-165px)] flex flex-col overflow-hidden">
+          <div className="bg-white rounded shadow-lg border w-full h-[calc(100vh-165px)] flex flex-col overflow-hidden">
             <div className="p-6 flex items-start justify-between border-b border-gray-100">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
+                <div className="w-12 h-12 bg-blue-50 rounded flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
                   <Users size={24} strokeWidth={2.5} />
                 </div>
                 <div className="space-y-0.5">
                   <h3 className="text-xl font-bold text-gray-800 tracking-tight">Team Management</h3>
                   <div className="flex items-center gap-4 text-[13px] text-gray-500 font-medium">
                     <span className="flex items-center gap-1.5">
-                      Parent: <span className="text-gray-700 font-semibold">anuj (leader)</span>
+                      Parent: <span className="text-gray-700 font-semibold">
+                        {capitalizeFirstLetter(user?.username)}
+                        <span className="text-blue-600"> ({user?.role})</span>
+                      </span>
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Phone size={14} className="text-gray-400" />
-                      <span className="text-gray-700">8877887788</span>
+                      <span className="text-gray-700">{user?.mobile_no}</span>
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Users size={14} className="text-gray-400" />
@@ -3323,40 +3783,109 @@ const TBOUsersSetting = () => {
                 <X size={20} />
               </button>
             </div>
+
+
             <div className="px-8 py-5 bg-gray-50/30 flex flex-wrap items-end gap-4">
               <div className="flex-1 min-w-[200px] space-y-1.5">
-                <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wider ml-1">Login Role</label>
+                <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wider ml-1">
+                  Login Role
+                </label>
                 <div className="relative">
-                  <select className="w-full h-11 px-4 pr-10 border border-gray-200 rounded-xl text-[13px] font-semibold text-gray-800 bg-white shadow-sm focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none appearance-none transition-all cursor-pointer">
-                    <option value="admin">Admin</option>
+                  <select
+                    value={teamRole}
+                    onChange={(e) => {
+                      setTeamRole(e.target.value);
+                      setTeamUser("");
+                    }}
+                    className="w-full h-11 px-4 pr-10 border border-gray-200 rounded text-[13px] font-semibold text-gray-800 bg-white shadow-sm focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none appearance-none transition-all cursor-pointer"
+                  >
+                    <option value="">All Roles</option>
+
+                    {teamRoles.map((role: any) => (
+                      <option key={role.id} value={String(role.id)}>
+                        {role.name}
+                      </option>
+                    ))}
                   </select>
                   <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>
               </div>
+
               <div className="flex-1 min-w-[220px] space-y-1.5">
-                <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wider ml-1">Search</label>
+                <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wider ml-1">
+                  Search
+                </label>
                 <div className="relative">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
+                    value={teamSearch}
+                    onChange={(e) => setTeamSearch(e.target.value)}
                     placeholder="Search users..."
-                    className="w-full h-11 pl-10 pr-4 border border-gray-200 rounded-xl text-[13px] font-medium text-gray-800 bg-white shadow-sm focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-gray-400"
+                    className="w-full h-11 pl-10 pr-4 border border-gray-200 rounded text-[13px] font-medium text-gray-800 bg-white shadow-sm focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-gray-400"
                   />
                 </div>
               </div>
+
               <div className="flex-1 min-w-[240px] space-y-1.5">
-                <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wider ml-1">Select User</label>
+                <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wider ml-1">
+                  Select User
+                </label>
                 <div className="relative">
-                  <select className="w-full h-11 px-4 pr-10 border border-gray-200 rounded-xl text-[13px] font-semibold text-gray-800 bg-white shadow-sm focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none appearance-none transition-all cursor-pointer">
-                    <option value="ganesh">GANESH (admin) - ga</option>
+                  <select
+                    value={teamUser}
+                    onChange={(e) => setTeamUser(e.target.value)}
+                    className="w-full h-11 px-4 pr-10 border border-gray-200 rounded text-[13px] font-semibold text-gray-800 bg-white shadow-sm focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none appearance-none transition-all cursor-pointer"
+                  >
+                    <option value="">Select User</option>
+
+                    {teamUsers.map((member: any) => (
+                      <option key={member.id} value={String(member.id)}>
+                        {`${capitalizeFirstLetter(member.username || member.name || "")} (${member.role || "-"})`}
+                      </option>
+                    ))}
                   </select>
                   <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>
               </div>
-              <button className="h-11 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-[14px] shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 min-w-[160px]">
+
+              <button
+                onClick={async () => {
+                  if (!teamUser) {
+                    alert("Please select user");
+                    return;
+                  }
+
+                  const res = await addParentChildApi({
+                    parent_user_id: userId,
+                    child_user_id: Number(teamUser),
+                    role: teamRole || "",
+                  });
+
+                  if (res?.success) {
+                    alert(res?.message || "Member added successfully");
+
+                    const refreshRes = await getUsersRolesApi({
+                      search: teamSearch || "",
+                      role: teamRole || "",
+                      limit: 50,
+                    });
+
+                    if (refreshRes?.success) {
+                      setTeamRoles(Array.isArray(refreshRes?.data?.roles) ? refreshRes.data.roles : []);
+                      setTeamUsers(Array.isArray(refreshRes?.data?.users) ? refreshRes.data.users : []);
+                    }
+                  } else {
+                    alert(res?.message || "Failed to add member");
+                  }
+                }}
+                className="h-11 px-6 bg-green-600 hover:bg-green-700 text-white rounded font-bold text-[14px] shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 min-w-[160px]"
+              >
                 <UserPlus size={18} /> Add Member
               </button>
             </div>
+
+
             <div className="px-8 py-10 flex-1">
               <div className="min-h-[220px] border-2 border-dashed border-gray-100 rounded-2xl flex flex-col items-center justify-center gap-4 bg-gray-50/20">
                 <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-gray-300 shadow-sm border border-gray-100">
@@ -3366,7 +3895,7 @@ const TBOUsersSetting = () => {
               </div>
             </div>
             <div className="px-8 py-5 border-t border-gray-100 flex items-center justify-end">
-              <button className="px-8 py-2.5 text-[14px] font-bold text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 rounded-xl transition-all shadow-sm">
+              <button className="px-8 py-2.5 text-[14px] font-bold text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 rounded transition-all shadow-sm">
                 Close
               </button>
             </div>
@@ -3377,7 +3906,7 @@ const TBOUsersSetting = () => {
       {/* Coming Soon Tab */}
       {activeTab === "coming_soon" && (
         <div className="px-6 mt-4 pb-6">
-          <div className="bg-white rounded-xl shadow border w-full flex flex-col p-6 items-center justify-center min-h-[400px]">
+          <div className="bg-white rounded shadow border w-full flex flex-col p-6 items-center justify-center min-h-[400px]">
             <h3 className="text-lg font-bold text-gray-600">Coming Soon</h3>
             <p className="text-gray-400 mt-2">Future features will appear here.</p>
           </div>
@@ -3388,7 +3917,7 @@ const TBOUsersSetting = () => {
         __html: `
           .custom-scrollbar::-webkit-scrollbar { width: 6px; }
           .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-          .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 20px; }
+          .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 10px; }
           .no-scrollbar::-webkit-scrollbar { display: none; }
         `
       }} />

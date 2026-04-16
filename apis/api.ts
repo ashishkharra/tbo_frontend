@@ -1,10 +1,12 @@
 import axios from "axios";
 
-const BASE_URL = "http://192.168.29.176:3500/api";
+const BASE_URL = "http://192.168.1.9:3500/api";
+// const BASE_URL = "http://165.99.222.223:3000/api";
 // const BASE_URL = "http://localhost:3500/api";
 // const BASE_URL = "http://192.168.1.9:3500/api";
+// const BASE_URL = "http://"
 
-export const IMAGE_URL = "http://localhost:3500";
+export const IMAGE_URL = "http://192.168.1.9:3500";
 
 const clearAuthStorage = () => {
   if (typeof window === "undefined") return;
@@ -137,6 +139,19 @@ export const PostTboUsers = async (data: any) => {
   }
 };
 
+export const UnlinkUser = async (id: any) => {
+  try {
+    const res = await axiosInstance.patch(`/auth/unlink/${id}/user`);
+    return res.data;
+  } catch (err: any) {
+    return {
+      success: false,
+      data: [],
+      message: err?.response?.data?.message || "Server error",
+    };
+  }
+};
+
 export const getTboUserDetails = async (id: number | string) => {
   try {
     const res = await axiosInstance.get(`/auth/users/${id}/details`);
@@ -240,7 +255,7 @@ export const getTboModules = async () => {
 
 export const UpdateTboUsers = async (id: any, data: any) => {
   try {
-    const res = await axiosInstance.put(`/auth/users/${id}`, data);
+    const res = await axiosInstance.patch(`/auth/users/${id}`, data);
     return res.data;
   } catch (err: any) {
     return {
@@ -251,9 +266,14 @@ export const UpdateTboUsers = async (id: any, data: any) => {
   }
 };
 
-export const DeleteTboUsers = async (id: any) => {
+export const DeleteTboUsers = async (ids: number[] | number) => {
   try {
-    const res = await axiosInstance.delete(`/auth/users/${id}`);
+    const normalizedIds = Array.isArray(ids) ? ids : [ids];
+
+    const res = await axiosInstance.delete(`/auth/users`, {
+      data: { ids: normalizedIds },
+    });
+
     return res.data;
   } catch (err: any) {
     return {
@@ -592,6 +612,40 @@ export const getVoterListSubFilter = async (filters: any) => {
       success: false,
       data: [],
       message: err?.response?.data?.message || "Server error",
+    };
+  }
+};
+
+export const getCastIdLookupApi = async (params: {
+  search?: string;
+  data_id?: number | string | Array<number | string>;
+  limit?: number;
+}) => {
+  try {
+    const res = await axiosInstance.get("/dataid/voters/castid-lookup", { params });
+    return res.data;
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err?.response?.data?.message || "Server error",
+      data: [],
+    };
+  }
+};
+
+export const getCastIdSurnameLookupApi = async (params: {
+  search?: string;
+  data_id?: number | string | Array<number | string>;
+  limit?: number;
+}) => {
+  try {
+    const res = await axiosInstance.get("/dataid/voters/castid-surname-lookup", { params });
+    return res.data;
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err?.response?.data?.message || "Server error",
+      data: [],
     };
   }
 };
@@ -1032,15 +1086,18 @@ export const downloadErollMappingExcel = async (filters: any = {}) => {
 
 export const saveLiveVoterListApi = async (payload: any[]) => {
   try {
-    const hasPhoto = payload.some((item) => item?.photo instanceof File);
+    const normalizedPayload = Array.isArray(payload) ? payload : [payload];
+    const hasPhoto = normalizedPayload.some(
+      (item) => item?.photo instanceof File
+    );
 
-    let body: any = payload;
-    let headers: any = getAuthHeaders();
+    let body: any = normalizedPayload;
+    const headers: any = getAuthHeaders();
 
     if (hasPhoto) {
       const formData = new FormData();
 
-      payload.forEach((item, index) => {
+      normalizedPayload.forEach((item, index) => {
         Object.entries(item).forEach(([key, value]) => {
           if (key === "photo" && value instanceof File) {
             formData.append(`photo_${index}`, value);
@@ -1051,7 +1108,12 @@ export const saveLiveVoterListApi = async (payload: any[]) => {
       });
 
       body = formData;
+
+      // browser khud multipart boundary set karega
       delete headers["Content-Type"];
+    } else {
+      body = normalizedPayload;
+      headers["Content-Type"] = "application/json";
     }
 
     const res = await axiosInstance.patch(`/dataid/update`, body, {
@@ -1118,6 +1180,26 @@ export const syncSurnameApi = async (dataids: any = []) => {
   }
 };
 
+export const getSurnameListApi = async (payload: any = {}) => {
+  try {
+    const res = await axiosInstance.post(`/dataid/surname/list`, payload);
+    return res.data;
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err?.response?.data?.message || "Server error",
+      error: err?.response?.data || null,
+      data: [],
+      pagination: {
+        total: 0,
+        page: 1,
+        limit: 50,
+        totalPages: 0,
+      },
+    };
+  }
+};
+
 export const addEmptyRowsApi = async (table: string, data_id: number, rowCount: number) => {
   try {
     const res = await axiosInstance.post(`/dataid/add-empty-rows`, {
@@ -1131,6 +1213,114 @@ export const addEmptyRowsApi = async (table: string, data_id: number, rowCount: 
     return {
       success: false,
       message: err?.response?.data?.message || "Server error",
+      error: err?.response?.data || null,
+    };
+  }
+};
+
+export const syncDeleteDataIdApi = async (payload: {
+  data_ids: number[];
+}) => {
+  try {
+    const res = await axiosInstance.post(
+      `/dataid/sync/delete/data_id`,
+      {
+        data_ids: payload.data_ids,
+      }
+    );
+
+    return res.data;
+  } catch (err: any) {
+    return {
+      success: false,
+      message:
+        err?.response?.data?.message || "Delete sync failed",
+      error: err?.response?.data || null,
+    };
+  }
+};
+
+export const getUsersRolesApi = async (params?: {
+  search?: string;
+  role?: string;
+  limit?: number;
+}) => {
+  try {
+    const res = await axiosInstance.get(`/team/get/user/roles`, {
+      params: {
+        search: params?.search || "",
+        role: params?.role || "",
+        limit: params?.limit || 50,
+      },
+    });
+
+    return res.data;
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err?.response?.data?.message || "Failed to fetch users roles",
+      error: err?.response?.data || null,
+    };
+  }
+};
+
+export const addParentChildApi = async (payload: {
+  parent_user_id: number;
+  child_user_id: number;
+  role?: string;
+}) => {
+  try {
+    const res = await axiosInstance.post(`/hierarchy/add`, {
+      parent_user_id: payload.parent_user_id,
+      child_user_id: payload.child_user_id,
+      role: payload.role || "",
+    });
+
+    return res.data;
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err?.response?.data?.message || "Failed to add member",
+      error: err?.response?.data || null,
+    };
+  }
+};
+
+export const getMultipleDataCountsApi = async (payload: {
+  data_ids: number[];
+}) => {
+  try {
+    const res = await axiosInstance.post(
+      `/dataid/count`,
+      {
+        data_ids: payload.data_ids,
+      }
+    );
+    return res.data;
+  } catch (err: any) {
+    return {
+      success: false,
+      data: [],
+      message:
+        err?.response?.data?.message || "Failed to fetch counts",
+      error: err?.response?.data || null,
+    };
+  }
+};
+
+export const inactiveDataIdApi = async (payload: {
+  data_ids: number[];
+}) => {
+  try {
+    const res = await axiosInstance.patch(`/dataid/inactive/data_id`, {
+      data_ids: payload.data_ids,
+    });
+
+    return res.data;
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err?.response?.data?.message || "Inactive data id failed",
       error: err?.response?.data || null,
     };
   }

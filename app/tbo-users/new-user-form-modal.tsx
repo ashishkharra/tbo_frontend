@@ -97,7 +97,6 @@ export default function NewUserFormModal({
 
   const canSubmit =
     form.username.trim() &&
-    form.email.trim() &&
     form.authenticatedEmail.trim() &&
     form.password.trim() &&
     form.mobile.trim() &&
@@ -202,7 +201,12 @@ export default function NewUserFormModal({
               <input
                 type="tel"
                 value={form.mobile}
-                onChange={(e) => setForm({ ...form, mobile: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '');
+                  if (value.length <= 10) {
+                    setForm({ ...form, mobile: value });
+                  }
+                }}
                 className="h-11 w-full rounded-xl border border-gray-300 px-4 text-sm text-gray-900 outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100"
                 placeholder="e.g. 9876543210"
               />
@@ -251,7 +255,7 @@ export default function NewUserFormModal({
 
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700">
-                Email *
+                Email <sup>(Optional)</sup>
               </label>
               <input
                 type="email"

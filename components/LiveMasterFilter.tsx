@@ -7,6 +7,8 @@ import {
   ChevronDown,
   Search,
   RefreshCw,
+  LogOut,
+  Power,
 } from "lucide-react";
 import { volterListMasterFilter, volterMasterFilterGo } from "@/apis/api";
 import { useAuth as useAuthContext } from "@/contexts/AuthContext";
@@ -443,7 +445,7 @@ function QuickMenuPopup({
       {
         id: "cast_by_surname",
         label: "Cast By Surname",
-        path: "/live-voter-list/castbysurname",
+        path: "/voter-list/castidbysurname",
         icon: ReportIcon,
       },
     ],
@@ -591,7 +593,7 @@ function QuickMenuPopup({
               scheduleClose();
             }}
           >
-            <div className="relative overflow-visible rounded-[28px] border border-white/50 bg-white/85 shadow-[0_30px_90px_rgba(15,23,42,0.28)] ring-1 ring-slate-200/60 backdrop-blur-2xl">
+            <div className="relative mr-14 overflow-visible rounded-[28px] border border-white/50 bg-white/85 shadow-[0_30px_90px_rgba(15,23,42,0.28)] ring-1 ring-slate-200/60 backdrop-blur-2xl">
               <div className="absolute inset-0 rounded-[28px] bg-gradient-to-br from-white via-slate-50/95 to-slate-100/80" />
 
               <div className="relative flex items-center justify-between border-b border-slate-200/70 px-5 py-4 sm:px-6">
@@ -660,7 +662,7 @@ function QuickMenuPopup({
                                   {item.label}
                                 </div>
                                 <div className="mt-1 text-xs text-slate-500">
-                                  {hasChildren ? "Hover to explore options" : "Open page"}
+                                  {hasChildren ? "Explore" : "Open page"}
                                 </div>
                               </div>
                             </div>
@@ -701,9 +703,9 @@ function QuickMenuPopup({
 /* ------------------------- Main Component ------------------------- */
 
 export default function LiveMasterFilter() {
-  const { logout } = useAuthContext();
+  const { user, logout } = useAuthContext();
   const router = useRouter();
-  const pathname = usePathname() || "";
+  const pathname: any = usePathname() || "";
 
   const quickMenuButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -849,6 +851,10 @@ export default function LiveMasterFilter() {
     setSelectedKendra("");
   };
 
+  const handleLogout = async () => {
+    await logout();
+  };
+
   const isAnyFilterSelected = Boolean(
     selectedDataId ||
     selectedPartyDistrict ||
@@ -956,38 +962,23 @@ export default function LiveMasterFilter() {
             )}
 
             <div className="flex items-center gap-1 flex-shrink-0">
-              {/* Existing functionality unchanged */}
-              {/* <button
-                onClick={handleApplyFilters}
-                disabled={!isAnyFilterSelected || applying}
-                className={`flex items-center justify-center space-x-0.5 px-2 py-2 rounded-lg font-medium text-sm h-[38px] ${
-                  isAnyFilterSelected && !applying
-                    ? "bg-gray-600 text-white hover:bg-gray-700 cursor-pointer"
-                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                }`}
-              >
-                {applying ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <span>Go</span>
-                )}
-              </button> */}
-
-              <button
-                onClick={handleRefresh}
-                disabled={applying}
-                className="flex items-center justify-center p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200 cursor-pointer h-[38px] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <RefreshCw size={16} />
-              </button>
+              {pathname === '/voter-list/import-data' && (
+                <button
+                  onClick={handleRefresh}
+                  disabled={applying}
+                  className="flex items-center justify-center p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200 cursor-pointer h-[38px] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RefreshCw size={16} />
+                </button>
+              )}
 
               <button
                 ref={quickMenuButtonRef}
                 type="button"
-                onMouseEnter={() => setMenuPopupOpen(true)}
+                // onMouseEnter={() => setMenuPopupOpen(true)}
                 onClick={() => setMenuPopupOpen((prev) => !prev)}
                 disabled={applying}
-                className="group relative flex items-center justify-center h-[42px] w-[42px] rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-[1px] hover:border-slate-300 hover:bg-white hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group relative cursor-pointer flex items-center justify-center h-[35px] w-[35px] rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-[1px] hover:border-slate-300 hover:bg-white hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-slate-50 via-white to-slate-100 opacity-100" />
                 <div className="relative grid grid-cols-2 grid-rows-2 gap-[3px] w-[18px] h-[18px]">
@@ -1001,36 +992,28 @@ export default function LiveMasterFilter() {
           </div>
 
           <div className="flex items-center gap-3 flex-shrink-0">
-            <div className="relative flex items-center gap-2 flex-shrink-0">
-              <span className="text-sm font-medium text-gray-700 uppercase">
-                ADMIN
-              </span>
-
-              <button
-                onClick={() => setLogoutDropdownOpen(!logoutDropdownOpen)}
-                className="flex items-center justify-center p-1.5 text-gray-700 hover:text-gray-900 hover:bg-gray-200 rounded-md transition-colors duration-200"
-              >
-                <img src="/logout.png" alt="logout" className="w-4 h-4" />
-              </button>
-
-              {logoutDropdownOpen && (
-                <div className="absolute top-full right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[120px] z-50">
-                  <button
-                    onClick={async () => {
-                      setLogoutDropdownOpen(false);
-                      try {
-                        await logout();
-                      } catch {
-                        router.push("/login");
-                      }
-                    }}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                  >
-                    <img src="/logout.png" alt="logout" className="w-4 h-4" />
-                    <span>Logout</span>
-                  </button>
+            <div className="flex items-center space-x-3">
+              {/* User Info */}
+              <div className="hidden md:flex flex-col items-end">
+                <div className="flex items-center flex-col space-x-2">
+                  <span className="font-bold uppercase text-[12px] text-gray-900">{user?.username}</span>
+                  <span className="text-xs font-extralight text-blue-800 rounded-full capitalize">
+                    {user?.role?.replace('_', ' ')}
+                  </span>
                 </div>
-              )}
+              </div>
+
+              {/* Logout Button */}
+              <button
+                onClick={() => {
+                  logout();
+                  router.push('/login');
+                }}
+                className="flex items-center border space-x-2 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors duration-200"
+                title="Logout"
+              >
+                <Power className="w-4 h-4 cursor-pointer font-bold" size={28} />
+              </button>
             </div>
           </div>
         </div>

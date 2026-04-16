@@ -133,7 +133,7 @@ export const LiveVoterFilters: React.FC<Props> = ({
         <div className="">
           {/* Primary Filter Row */}
           <div className="flex flex-wrap items-start gap-3">
-            <div className="flex-1 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-10 gap-2">
+            <div className="flex-1 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-2">
 
               {/* LBT - Simple array */}
               <div className="min-w-[70px]">
@@ -303,19 +303,6 @@ export const LiveVoterFilters: React.FC<Props> = ({
                 </select>
               </div>
 
-              {/* Name - Simple input */}
-              <div className="min-w-[70px]">
-                <input
-                  type="text"
-                  placeholder="नाम"
-                  value={filters.name || ""}
-                  onChange={(e) =>
-                    setFilters({ ...filters, name: e.target.value })
-                  }
-                  className="w-full px-2 py-1.5 border border-[#3a3f4a] rounded text-xs placeholder:text-black focus:outline-none focus:border-[#e8b12c] transition-colors"
-                />
-              </div>
-
               {/* Surname - Simple input */}
               <div className="min-w-[70px]">
                 <input
@@ -355,6 +342,19 @@ export const LiveVoterFilters: React.FC<Props> = ({
                   ))}
                 </select>
               </div>
+            </div>
+
+            {/* Name - Simple input */}
+            <div className="min-w-[100px]">
+              <input
+                type="text"
+                placeholder="नाम"
+                value={filters.name || ""}
+                onChange={(e) =>
+                  setFilters({ ...filters, name: e.target.value })
+                }
+                className="w-full px-2 py-1.5 border border-[#3a3f4a] rounded text-xs placeholder:text-black focus:outline-none focus:border-[#e8b12c] transition-colors"
+              />
             </div>
 
             {/* Action Buttons */}

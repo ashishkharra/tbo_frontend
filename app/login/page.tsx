@@ -208,6 +208,13 @@ export default function LoginPage() {
 
     if (typeof window !== "undefined" && user) {
       localStorage.setItem("userInfo", JSON.stringify(user));
+
+      if (user.last_login) {
+        localStorage.setItem("last_login", user.last_login);
+      } else {
+        // fallback → current time
+        localStorage.setItem("last_login", new Date().toISOString());
+      }
     }
 
     try {
@@ -282,7 +289,6 @@ export default function LoginPage() {
             : "You are already logged in on this device"
         );
         await persistLogin(token, user);
-        console.log('direct login')
         return;
       }
 

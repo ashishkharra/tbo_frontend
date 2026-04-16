@@ -11,17 +11,20 @@ import Handsontable from "handsontable";
 import { LiveMasterFilter } from "./LiveMasterFilter";
 import { LiveVoterFilters } from "./LiveVoterFilters";
 import { PrintModal } from "./PrintModal";
-import { CommonPagination } from "./CommonPagination";
+
 import {
   downloadPrintRegister,
   filterPrintRegister,
   getVoterListSubFilter,
   getYojnaListApi,
   volterMasterFilterGo,
-  saveLiveVoterListApi
+  saveLiveVoterListApi,
+  getCastIdLookupApi,
+  getCastIdSurnameLookupApi,
 } from "@/apis/api";
 import { getOriginalKey, mapFiltersToBackend } from "@/utils/helper";
 import YojnaModal from "./YojnaModal";
+import CommonPagination from "../CommonPagination";
 
 registerAllModules();
 
@@ -33,18 +36,25 @@ interface VoterData {
   vname?: string;
   relation?: string;
   rname?: string | null;
-  surname?: string | null;
+  surname?: string | null | Record<string, any>;
   age?: number;
   sex?: string;
   epic?: string;
   hno?: string;
   section?: string;
   sec_no?: number;
+
   castid?: string;
+  cast_id?: string; // add this
   cast_id_hi?: string;
   cast_cat?: string;
+  religion?: string;
+
   castid_surname?: string;
   cast_id_surname?: string;
+  subcast?: string;
+  oldnew?: number;
+
   edu_id?: string;
   education_id_hi?: string;
   proff_id?: string;
@@ -205,10 +215,10 @@ const columns = [
 export default function LiveVoterListPage(): React.ReactElement {
   const router = useRouter();
   const hotTableRef = useRef<any>(null);
-
+  type HotChangeTuple = [number, string | number, unknown, unknown];
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [showMoreLiveVoterFilters, setShowMoreLiveVoterFilters] =
-    useState<number>(0);
+    useState<number>(1);
   const [showDownloadPrintMenu, setShowDownloadPrintMenu] =
     useState<boolean>(false);
   const [showPrintModal, setShowPrintModal] = useState<boolean>(false);
@@ -249,7 +259,7 @@ export default function LiveVoterListPage(): React.ReactElement {
     totalPages: 1,
   });
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [itemsPerPage, setItemsPerPage] = useState<number | "All">(1000);
+  const [itemsPerPage, setItemsPerPage] = useState<number | "All">(50);
   const [currentFilters, setCurrentFilters] = useState<any>({});
 
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
@@ -293,6 +303,10 @@ export default function LiveVoterListPage(): React.ReactElement {
   const [activeFilterMode, setActiveFilterMode] = useState<"master" | "sub">(
     "master"
   );
+
+  const activeEditorInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const activeEditorListenerRef = useRef<((e: Event) => void) | null>(null);
+
   const [liveVoterListFilters, setLiveVoterListFilters] = useState<any>({
     lbt: "",
     gram: "",
@@ -335,10 +349,121 @@ export default function LiveVoterListPage(): React.ReactElement {
     mobileFilter: "all",
   });
 
+  type CastLookupItem = {
+    castid: string;
+    caste: string;
+    cast_cat?: string;
+    religion?: string;
+    data_id?: number | string;
+  };
+
+  type CastSurnameLookupItem = {
+    castid_surname: string;
+    surname: string;
+    subcast?: string;
+    oldnew?: number;
+    data_id?: number | string;
+  };
+
+  type LookupMode = "castid" | "castid_surname" | null;
+
+  const [lookupState, setLookupState] = useState<{
+    open: boolean;
+    row: number;
+    prop: LookupMode;
+    items: Array<CastLookupItem | CastSurnameLookupItem>;
+    activeIndex: number;
+    top: number;
+    left: number;
+    width: number;
+    loading: boolean;
+  }>({
+    open: false,
+    row: -1,
+    prop: null,
+    items: [],
+    activeIndex: 0,
+    top: 0,
+    left: 0,
+    width: 320,
+    loading: false,
+  });
+
+  const castLookupCacheRef = useRef<Map<string, CastLookupItem[]>>(new Map());
+  const castSurnameLookupCacheRef = useRef<Map<string, CastSurnameLookupItem[]>>(new Map());
+  const activeLookupRequestRef = useRef<string>("");
+
   const extractId = (value: string): string => {
     if (!value || value === "All") return "";
     const parts = value.split(" - ");
     return parts[0].trim();
+  };
+
+  function debounce<T extends (...args: any[]) => void>(fn: T, wait = 250) {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    return (...args: Parameters<T>) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), wait);
+    };
+  }
+
+  const closeLookup = () => {
+    activeLookupRequestRef.current = "";
+    setLookupState((prev) => ({
+      ...prev,
+      open: false,
+      row: -1,
+      prop: null,
+      items: [],
+      activeIndex: 0,
+      loading: false,
+    }));
+  };
+
+  const openLookupAtCell = (
+    row: number,
+    prop: LookupMode,
+    items: Array<CastLookupItem | CastSurnameLookupItem>,
+    loading = false
+  ) => {
+    const hot = hotTableRef.current?.hotInstance;
+    if (!hot || !prop) return;
+
+    const col = hot.propToCol(prop);
+    const td = hot.getCell(row, col);
+    if (!td) return;
+
+    const rect = td.getBoundingClientRect();
+
+    setLookupState({
+      open: true,
+      row,
+      prop,
+      items,
+      activeIndex: 0,
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      loading,
+    });
+  };
+
+  const getEditorValue = (row: number, prop: string) => {
+    const hot = hotTableRef.current?.hotInstance;
+    if (!hot) return "";
+
+    const activeEditor = hot.getActiveEditor?.();
+    const editorValue =
+      activeEditor?.TEXTAREA?.value ??
+      activeEditor?.TEXTAREA_PARENT?.querySelector?.("textarea")?.value ??
+      activeEditor?.TEXTAREA_PARENT?.querySelector?.("input")?.value;
+
+    if (editorValue !== undefined && editorValue !== null) {
+      return String(editorValue);
+    }
+
+    return String(hot.getDataAtRowProp(row, prop) ?? "");
   };
 
   useEffect(() => {
@@ -365,6 +490,170 @@ export default function LiveVoterListPage(): React.ReactElement {
     };
 
     fetchAcOptions();
+  }, []);
+
+  // Real-time editor input listener for API calls
+  // useEffect(() => {
+  //   const hot = hotTableRef.current?.hotInstance;
+  //   if (!hot) return;
+
+  //   let inputElement: any = null;
+  //   let handleInput: ((e: Event) => void) | null = null;
+
+  //   const attachInputListener = () => {
+  //     try {
+  //       const activeEditor = hot.getActiveEditor?.();
+  //       if (!activeEditor) return;
+
+  //       // Get the input/textarea element from the editor
+  //       inputElement =
+  //         activeEditor.TEXTAREA ||
+  //         activeEditor.TEXTAREA_PARENT?.querySelector?.("textarea") ||
+  //         activeEditor.TEXTAREA_PARENT?.querySelector?.("input");
+
+  //       if (!inputElement) {
+  //         console.warn("Could not find input element in editor");
+  //         return;
+  //       }
+
+  //       const currentValue = inputElement.value || "";
+  //       const selected = hot.getSelectedLast?.();
+  //       if (!selected) return;
+
+  //       const [row, col] = selected;
+  //       const prop = hot.colToProp(col);
+
+  //       // Initial API call for current value
+  //       if (currentValue.trim() && (prop === "castid" || prop === "castid_surname")) {
+  //         console.log(`Initial API call for ${prop}:`, currentValue);
+  //         if (prop === "castid") {
+  //           fetchCastLookup(row, currentValue);
+  //         } else if (prop === "castid_surname") {
+  //           fetchCastSurnameLookup(row, currentValue);
+  //         }
+  //       }
+
+  //       // Handle future input events
+  //       handleInput = () => {
+  //         const newValue = inputElement.value || "";
+
+  //         if (!newValue.trim()) {
+  //           closeLookup();
+  //           return;
+  //         }
+
+  //         const currentSelected = hot.getSelectedLast?.();
+  //         if (!currentSelected) return;
+
+  //         const [currentRow, currentCol] = currentSelected;
+  //         const currentProp = hot.colToProp(currentCol);
+
+  //         console.log(`Input detected on ${currentProp}:`, newValue);
+
+  //         // Call appropriate lookup API based on column
+  //         if (currentProp === "castid") {
+  //           fetchCastLookup(currentRow, newValue);
+  //         } else if (currentProp === "castid_surname") {
+  //           fetchCastSurnameLookup(currentRow, newValue);
+  //         }
+  //       };
+
+  //       inputElement.addEventListener("input", handleInput);
+  //     } catch (err) {
+  //       console.error("Error attaching input listener:", err);
+  //     }
+  //   };
+
+  //   const detachInputListener = () => {
+  //     if (inputElement && handleInput) {
+  //       inputElement.removeEventListener("input", handleInput);
+  //       inputElement = null;
+  //       handleInput = null;
+  //     }
+  //   };
+
+  //   // Attach listener when editor opens
+  //   hot.addHook?.("beforeEditRender", attachInputListener);
+
+  //   // Detach listener when editor closes
+  //   hot.addHook?.("afterEditEnd", detachInputListener);
+
+  //   return () => {
+  //     hot.removeHook?.("beforeEditRender", attachInputListener);
+  //     hot.removeHook?.("afterEditEnd", detachInputListener);
+  //     detachInputListener();
+  //   };
+  // }, [voterData]);
+
+  const detachEditorInputListener = () => {
+    if (activeEditorInputRef.current && activeEditorListenerRef.current) {
+      activeEditorInputRef.current.removeEventListener(
+        "input",
+        activeEditorListenerRef.current
+      );
+    }
+
+    activeEditorInputRef.current = null;
+    activeEditorListenerRef.current = null;
+  };
+
+  const attachEditorInputListener = (row: number, prop: string) => {
+    const hot = hotTableRef.current?.hotInstance;
+    if (!hot) return;
+
+    detachEditorInputListener();
+
+    setTimeout(() => {
+      const activeEditor = hot.getActiveEditor?.();
+      if (!activeEditor) return;
+
+      const inputEl =
+        activeEditor.TEXTAREA ||
+        activeEditor.TEXTAREA_PARENT?.querySelector?.("textarea") ||
+        activeEditor.TEXTAREA_PARENT?.querySelector?.("input");
+
+      if (!inputEl) {
+        console.warn("Editor input element not found");
+        return;
+      }
+
+      const handler = (e: Event) => {
+        const target = e.target as HTMLInputElement | HTMLTextAreaElement;
+        const typedValue = target?.value ?? "";
+
+        if (!typedValue.trim()) {
+          closeLookup();
+          return;
+        }
+
+        if (prop === "castid") {
+          closeLookup(); // no suggestion UI
+          fetchCastLookup(row, typedValue);
+        } else if (prop === "castid_surname") {
+          fetchCastSurnameLookup(row, typedValue);
+        }
+      };
+
+      inputEl.addEventListener("input", handler);
+
+      activeEditorInputRef.current = inputEl;
+      activeEditorListenerRef.current = handler;
+
+      const initialValue = inputEl.value || "";
+      if (initialValue.trim()) {
+        if (prop === "castid") {
+          closeLookup();
+          fetchCastLookup(row, initialValue);
+        } else if (prop === "castid_surname") {
+          fetchCastSurnameLookup(row, initialValue);
+        }
+      }
+    }, 0);
+  };
+  useEffect(() => {
+    return () => {
+      detachEditorInputListener();
+    };
   }, []);
 
   const handleAcChange = async (acId: string) => {
@@ -478,7 +767,8 @@ export default function LiveVoterListPage(): React.ReactElement {
 
   const handleApplyFilters = async (
     params: Record<string, any>,
-    targetPage?: number
+    targetPage?: number,
+    forcedLimit?: number | "All"
   ): Promise<void> => {
     try {
       setLoading(true);
@@ -522,7 +812,13 @@ export default function LiveVoterListPage(): React.ReactElement {
         setSelectedPartyDistrict(String(params.party_district_id));
       }
 
-      const resolvedLimit = Number(itemsPerPage);
+      const effectiveItemsPerPage = forcedLimit ?? itemsPerPage;
+      const resolvedLimit =
+        effectiveItemsPerPage === "All"
+          ? metadata.totalRecords > 0
+            ? metadata.totalRecords
+            : 1000000
+          : Number(effectiveItemsPerPage);
 
       const queryParams = {
         ...params,
@@ -626,7 +922,10 @@ export default function LiveVoterListPage(): React.ReactElement {
     }
   };
 
-  const handleSubFilterGo = async (targetPage?: number): Promise<void> => {
+  const handleSubFilterGo = async (
+    targetPage?: number,
+    forcedLimit?: number | "All"
+  ): Promise<void> => {
     try {
       setLoading(true);
       setActiveFilterMode("sub");
@@ -634,12 +933,14 @@ export default function LiveVoterListPage(): React.ReactElement {
       const page = targetPage !== undefined ? Number(targetPage) : Number(currentPage);
 
       // Calculate limit properly
+      const effectiveItemsPerPage = forcedLimit ?? itemsPerPage;
+
       const apiLimit =
-        itemsPerPage === "All"
+        effectiveItemsPerPage === "All"
           ? metadata.totalRecords > 0
             ? metadata.totalRecords
             : 1000000
-          : Number(itemsPerPage);
+          : Number(effectiveItemsPerPage);
 
       // Helper function to safely convert to number or return undefined
       const safeNumber = (value: any): number | undefined => {
@@ -838,37 +1139,21 @@ export default function LiveVoterListPage(): React.ReactElement {
     setItemsPerPage(value);
     setCurrentPage(1);
 
-    const apiLimit =
-      value === "All"
-        ? metadata.totalRecords > 0
-          ? metadata.totalRecords
-          : 1000000
-        : Number(value);
-
     if (activeFilterMode === "master") {
-      // Always re-run master filters when page size changes
-      await handleApplyFilters({
-        ...currentFilters,
-        page: 1,
-        limit: apiLimit,
-      });
+      await handleApplyFilters(
+        {
+          ...currentFilters,
+        },
+        1,
+        value
+      );
     } else {
-      // For sub-filter, call with page 1 and new limit
-      await handleSubFilterGo(1);
+      await handleSubFilterGo(1, value);
     }
   };
 
   const handleRefresh = async (): Promise<void> => {
-    console.log("REFRESH: Clearing all data");
-
-    // Clear all master filter selections
-    setSelectedDataId("");
-    setSelectedAssembly("");
-    setSelectedParliament("");
-    setSelectedDistrict("");
-
-    // Clear sub filter form
-    setLiveVoterListFilters({
+    const resetFilters = {
       lbt: "",
       gram: "",
       gp: "",
@@ -898,60 +1183,85 @@ export default function LiveVoterListPage(): React.ReactElement {
       mandal: "",
       kendra: "",
       village: "",
-    });
+    };
 
-    // Reset pagination
+    setLiveVoterListFilters(resetFilters);
     setCurrentPage(1);
-    setCurrentFilters({});
     setActiveFilterMode("master");
+    setActiveDropdown(null);
+    setShowDownloadPrintMenu(false);
 
-    // IMPORTANT: Clear ALL voter data
-    setVoterData([]);
+    const extractIdFromDisplay = (displayValue: any): string | undefined => {
+      if (displayValue === undefined || displayValue === null) return undefined;
 
-    // Clear mapping data
-    setMappingData({
-      block: null,
-      block_id: null,
-      gp_ward: null,
-      gp_ward_id: null,
-      kendra: null,
-      kendra_id: null,
-      mandal: null,
-      mandal_id: null,
-      pincode: null,
-      pjila: null,
-      policst: null,
-      postoff: null,
-      ru: null,
-      village: null,
-      village_id: null,
-    });
+      if (typeof displayValue === "number") {
+        return String(displayValue);
+      }
 
-    // Reset metadata
-    setMetadata({
-      totalRecords: 0,
-      currentPage: 1,
-      totalPages: 1,
-    });
+      if (typeof displayValue === "string" && !displayValue.includes(" - ")) {
+        return displayValue.trim();
+      }
 
-    // Reset filter options
-    setFilterOptions({
-      blocks: [],
-      gps: [],
-      kendras: [],
-      mandals: [],
-      pincodes: [],
-      pjilas: [],
-      policeStations: [],
-      postOffices: [],
-      villages: [],
-      ru: [],
-      sections: [],
-      bhagNos: [],
-      castId: [],
-      sex: [],
-      dataIds: [],
-    });
+      if (typeof displayValue === "string") {
+        const parts = displayValue.split(" - ");
+        return parts[0].trim();
+      }
+
+      return undefined;
+    };
+
+    const refreshedMasterParams: any = {
+      ...(selectedDataId && {
+        data_id: Number(extractIdFromDisplay(selectedDataId)),
+      }),
+      ...(selectedAssembly && {
+        ac_id: Number(extractIdFromDisplay(selectedAssembly)),
+      }),
+      ...(selectedParliament && {
+        pc_id: Number(extractIdFromDisplay(selectedParliament)),
+      }),
+      ...(selectedDistrict && {
+        district_id: Number(extractIdFromDisplay(selectedDistrict)),
+      }),
+      ...(seltectPartyDistrict && {
+        party_district_id: Number(extractIdFromDisplay(seltectPartyDistrict)),
+      }),
+    };
+
+    const cleanMasterParams = Object.fromEntries(
+      Object.entries(refreshedMasterParams).filter(
+        ([_, v]) => v !== undefined && v !== null && v !== "" && !Number.isNaN(v)
+      )
+    );
+
+    if (Object.keys(cleanMasterParams).length > 0) {
+      await handleApplyFilters(cleanMasterParams, 1);
+    } else {
+      setVoterData([]);
+      setMetadata({
+        totalRecords: 0,
+        currentPage: 1,
+        totalPages: 1,
+      });
+      setFilterOptions({
+        blocks: [],
+        gps: [],
+        kendras: [],
+        mandals: [],
+        pincodes: [],
+        pjilas: [],
+        policeStations: [],
+        postOffices: [],
+        villages: [],
+        ru: [],
+        sections: [],
+        bhagNos: [],
+        castId: [],
+        sex: [],
+        dataIds: [],
+      });
+      setIsGoClicked(false);
+    }
   };
 
   const handleDownloadPDF = async (requestData?: any) => {
@@ -1038,12 +1348,284 @@ export default function LiveVoterListPage(): React.ReactElement {
     }
   };
 
+  const fetchCastLookup = debounce(async (row: number, searchValue: string) => {
+    try {
+      const typed = String(searchValue || "").trim().toUpperCase();
+
+      if (!typed) return;
+
+      const res = await getCastIdLookupApi({
+        search: typed,
+        data_id: voterData?.[row]?.data_id || currentFilters?.data_id || null,
+        limit: 1,
+      });
+
+      if (!res?.success || !Array.isArray(res?.data) || res.data.length === 0) {
+        return;
+      }
+
+      const match = res.data[0];
+      const hot = hotTableRef.current?.hotInstance;
+      if (!hot) return;
+
+      hot.setDataAtRowProp(row, "castid", match.castid || "");
+      hot.setDataAtRowProp(row, "cast_id", match.caste || "");
+      hot.setDataAtRowProp(row, "cast_cat", match.cast_cat || "");
+      hot.setDataAtRowProp(row, "religion", match.religion || "");
+
+      setVoterData((prev) => {
+        const next = [...prev];
+        if (!next[row]) next[row] = {};
+        next[row] = {
+          ...next[row],
+          castid: match.castid || "",
+          cast_id: match.caste || "",
+          cast_cat: match.cast_cat || "",
+          religion: match.religion || "",
+          modified: true,
+        };
+        return next;
+      });
+
+      setEditedRows((prev) => {
+        const baseData = voterData[row] || {};
+        return {
+          ...prev,
+          [baseData?.id ?? row]: {
+            ...baseData,
+            castid: match.castid || "",
+            cast_id: match.caste || "",
+            cast_cat: match.cast_cat || "",
+            religion: match.religion || "",
+          },
+        };
+      });
+
+      closeLookup();
+    } catch (error) {
+      console.error("fetchCastLookup error:", error);
+    }
+  }, 750);
+
+  const fetchCastSurnameLookup = debounce(async (row: number, value: string) => {
+    if (row < 0 || row >= voterData.length) {
+      closeLookup();
+      return;
+    }
+
+    const rowData = voterData[row];
+    if (!rowData) {
+      closeLookup();
+      return;
+    }
+
+    const dataId = rowData?.data_id;
+    const search = String(value || "").trim();
+
+    if (!search) {
+      closeLookup();
+      return;
+    }
+
+    const cacheKey = `${dataId || "all"}__${search.toLowerCase()}`;
+    const currentRequestKey = `castid_surname|${row}|${search.toLowerCase()}`;
+    activeLookupRequestRef.current = currentRequestKey;
+
+    if (castSurnameLookupCacheRef.current.has(cacheKey)) {
+      openLookupAtCell(
+        row,
+        "castid_surname",
+        castSurnameLookupCacheRef.current.get(cacheKey) || []
+      );
+      return;
+    }
+
+    openLookupAtCell(row, "castid_surname", [], true);
+
+    try {
+      const res = await getCastIdSurnameLookupApi({
+        search,
+        data_id: dataId,
+        limit: 20,
+      });
+
+      if (activeLookupRequestRef.current !== currentRequestKey) {
+        return;
+      }
+
+      const isWrappedResponse = res && typeof res === "object" && "success" in res;
+      if (isWrappedResponse && !res.success) {
+        console.warn("Cast surname lookup API returned unsuccessful response:", (res as any).message);
+        closeLookup();
+        return;
+      }
+
+      const responseData = isWrappedResponse ? (res as any).data : res;
+      const items = Array.isArray(responseData) ? responseData : [];
+      castSurnameLookupCacheRef.current.set(cacheKey, items);
+      openLookupAtCell(row, "castid_surname", items, false);
+    } catch (error) {
+      if (activeLookupRequestRef.current !== currentRequestKey) {
+        return;
+      }
+      console.error("cast surname lookup error:", error);
+      closeLookup();
+    }
+  }, 500);
+
+  const applyCastLookupSelection = (rowIndex: number, selected: CastLookupItem) => {
+    const hot = hotTableRef.current?.hotInstance;
+    if (!hot) return;
+
+    try {
+      hot.setDataAtRowProp(rowIndex, "castid", selected.castid || "", "lookup-fill");
+      hot.setDataAtRowProp(rowIndex, "cast_id", selected.caste || "", "lookup-fill");
+      if (selected.cast_cat) {
+        hot.setDataAtRowProp(rowIndex, "cast_cat", selected.cast_cat, "lookup-fill");
+      }
+      if (selected.religion) {
+        hot.setDataAtRowProp(rowIndex, "religion", selected.religion, "lookup-fill");
+      }
+
+      setVoterData((prev) => {
+        const next = [...prev];
+        if (!next[rowIndex]) next[rowIndex] = {};
+        next[rowIndex] = {
+          ...next[rowIndex],
+          castid: selected.castid || "",
+          cast_id: selected.caste || "",
+          cast_cat: selected.cast_cat || next[rowIndex]?.cast_cat || "",
+          religion: selected.religion || next[rowIndex]?.religion || "",
+          modified: true,
+        };
+        return next;
+      });
+
+      setEditedRows((prev) => {
+        const baseData = voterData[rowIndex] || {};
+        return {
+          ...prev,
+          [baseData?.id ?? rowIndex]: {
+            ...baseData,
+            castid: selected.castid || "",
+            cast_id: selected.caste || "",
+            cast_cat: selected.cast_cat || baseData.cast_cat || "",
+            religion: selected.religion || baseData.religion || "",
+          },
+        };
+      });
+    } catch (error) {
+      console.error("Error applying cast lookup selection:", error);
+    }
+
+    closeLookup();
+  };
+
+  const applyCastSurnameLookupSelection = (
+    rowIndex: number,
+    selected: CastSurnameLookupItem
+  ) => {
+    const hot = hotTableRef.current?.hotInstance;
+    if (!hot) return;
+
+    try {
+      // Update the Handsontable cells immediately
+      hot.setDataAtRowProp(
+        rowIndex,
+        "castid_surname",
+        selected.castid_surname || "",
+        "lookup-fill"
+      );
+      hot.setDataAtRowProp(
+        rowIndex,
+        "cast_id_surname",
+        selected.surname || "",
+        "lookup-fill"
+      );
+      if (selected.subcast) hot.setDataAtRowProp(rowIndex, "subcast", selected.subcast, "lookup-fill");
+      if (selected.oldnew !== undefined) hot.setDataAtRowProp(rowIndex, "oldnew", selected.oldnew, "lookup-fill");
+
+      // Update voterData state
+      setVoterData((prev) => {
+        const next = [...prev];
+        if (!next[rowIndex]) next[rowIndex] = {};
+        const current = { ...next[rowIndex] };
+
+        current.castid_surname = selected.castid_surname || "";
+        current.cast_id_surname = selected.surname || "";
+        current.subcast = selected.subcast || current.subcast || "";
+        current.oldnew = selected.oldnew ?? current.oldnew;
+        current.modified = true;
+
+        next[rowIndex] = current;
+        return next;
+      });
+
+      // Update edited rows - use the updated data directly
+      setEditedRows((prev) => {
+        const baseData = voterData[rowIndex] || {};
+        const rowData = {
+          ...baseData,
+          castid_surname: selected.castid_surname || "",
+          cast_id_surname: selected.surname || "",
+          subcast: selected.subcast || baseData.subcast || "",
+          oldnew: selected.oldnew ?? baseData.oldnew,
+        };
+
+        return {
+          ...prev,
+          [baseData?.id ?? rowIndex]: rowData,
+        };
+      });
+    } catch (error) {
+      console.error("Error applying cast surname lookup selection:", error);
+    }
+
+    closeLookup();
+  };
+
+  const handleLookupSelect = (item: CastLookupItem | CastSurnameLookupItem) => {
+    if (lookupState.row < 0 || !lookupState.prop) return;
+
+    const currentRow = lookupState.row;
+    const currentProp = lookupState.prop;
+    const hot = hotTableRef.current?.hotInstance;
+
+    try {
+      if (currentProp === "castid") {
+        applyCastLookupSelection(currentRow, item as CastLookupItem);
+      } else if (currentProp === "castid_surname") {
+        applyCastSurnameLookupSelection(currentRow, item as CastSurnameLookupItem);
+      }
+    } catch (error) {
+      console.error("Error handling lookup selection:", error);
+      return;
+    }
+
+    // ✅ keyboard aur mouse dono me same movement
+    if (!hot) return;
+
+    const currentCol = hot.propToCol(currentProp);
+    const nextRow = currentRow + 1;
+
+    setTimeout(() => {
+      if (nextRow < hot.countRows()) {
+        hot.selectCell(nextRow, currentCol);
+        hot.beginEditing();
+      }
+    }, 0);
+  };
+
   const HIDDEN_COLUMNS = [
     "acc_no",
     "accNo",
     "account_no",
     "mapping",
     "mapping_id",
+    "cast_cat_name",
+    "caste",
+    "cast_id",
+    "cast_id_surname",
   ];
 
   const columns =
@@ -1059,7 +1641,7 @@ export default function LiveVoterListPage(): React.ReactElement {
             {
               data: "cast_id",
               title: "CAST HI",
-              readOnly: false,
+              readOnly: true,
               className: "htCenter htMiddle",
             },
           ],
@@ -1067,7 +1649,7 @@ export default function LiveVoterListPage(): React.ReactElement {
             {
               data: "cast_id_surname",
               title: "SURNAME HI",
-              readOnly: false,
+              readOnly: true,
               className: "htCenter htMiddle",
             },
           ],
@@ -1092,16 +1674,67 @@ export default function LiveVoterListPage(): React.ReactElement {
         const orderedKeys: string[] = [];
 
         visibleKeys.forEach((key) => {
-          orderedKeys.push(key);
+          if (!orderedKeys.includes(key)) {
+            orderedKeys.push(key);
+          }
 
           if (extraColumnsMap[key]) {
             extraColumnsMap[key].forEach((column) => {
-              if (typeof column.data === "string") {
+              if (
+                typeof column.data === "string" &&
+                !orderedKeys.includes(column.data)
+              ) {
                 orderedKeys.push(column.data);
               }
             });
           }
         });
+
+        const moveRelatedIdNextToField = (baseKey: string, idKey: string) => {
+          const baseIndex = orderedKeys.indexOf(baseKey);
+          const idIndex = orderedKeys.indexOf(idKey);
+
+          if (baseIndex === -1 || idIndex === -1 || idIndex === baseIndex + 1) {
+            return;
+          }
+
+          orderedKeys.splice(idIndex, 1);
+          const insertIndex = orderedKeys.indexOf(baseKey) + 1;
+          orderedKeys.splice(insertIndex, 0, idKey);
+        };
+
+        // Ensure IDs are shown adjacent to their related label fields.
+        moveRelatedIdNextToField("block", "block_id");
+        moveRelatedIdNextToField("gp_ward", "gp_ward_id");
+        moveRelatedIdNextToField("village", "village_id");
+        moveRelatedIdNextToField("pincode", "pincode_id");
+        moveRelatedIdNextToField("mandal", "mandal_id");
+        moveRelatedIdNextToField("kendra", "kendra_id");
+        moveRelatedIdNextToField("postoff", "postoff_id");
+        moveRelatedIdNextToField("policst", "policst_id");
+        moveRelatedIdNextToField("district", "district_id");
+
+        // Ensure religion appears immediately after cast_cat when both exist
+        if (orderedKeys.includes("cast_cat") && orderedKeys.includes("religion")) {
+          const castCatIndex = orderedKeys.indexOf("cast_cat");
+          const religionIndex = orderedKeys.indexOf("religion");
+          if (religionIndex !== castCatIndex + 1) {
+            orderedKeys.splice(religionIndex, 1);
+            orderedKeys.splice(castCatIndex + 1, 0, "religion");
+          }
+        }
+
+        const moveKeyToLast = (key: string) => {
+          const index = orderedKeys.indexOf(key);
+          if (index !== -1) {
+            orderedKeys.splice(index, 1);
+            orderedKeys.push(key);
+          }
+        };
+
+        moveKeyToLast("update_by");
+        moveKeyToLast("updated_by");
+        moveKeyToLast("updatedBy");
 
         const allColumns = orderedKeys.map((key) => {
           const manualColumn = Object.values(extraColumnsMap)
@@ -1117,6 +1750,32 @@ export default function LiveVoterListPage(): React.ReactElement {
             title: key.replace(/_/g, " ").toUpperCase(),
             readOnly: false,
             className: "htCenter htMiddle",
+            renderer: (instance: any, td: any, row: any, col: any, prop: any, value: any) => {
+              let displayValue = value ?? "";
+
+              if (key === "ru") {
+                if (value === 1 || value === "1") {
+                  displayValue = "शहरी";
+                } else if (value === 0 || value === "0") {
+                  displayValue = "ग्रामीण";
+                } else {
+                  displayValue = "-";
+                }
+              }
+
+              else if (key === "pdob_verify") {
+                displayValue =
+                  value === 1 || value === "1"
+                    ? "true"
+                    : value === 0 || value === "0"
+                      ? "false"
+                      : String(value ?? "");
+              }
+
+              td.textContent = displayValue;
+              td.className = "htCenter htMiddle";
+              return td;
+            },
 
             ...(key === "surname" && {
               renderer: (
@@ -1129,8 +1788,6 @@ export default function LiveVoterListPage(): React.ReactElement {
               ) => {
                 let surnameValue = "-";
                 if (value && typeof value === "object") {
-
-                  // Handle surname object with r and v properties
                   const voterSurname = value.v || "";
                   const relationSurname = value.r || "";
 
@@ -1150,6 +1807,86 @@ export default function LiveVoterListPage(): React.ReactElement {
                 td.textContent = surnameValue;
                 td.className = "htCenter htMiddle";
                 return td;
+              },
+              editor: class SurnameEditor extends Handsontable.editors.TextEditor {
+                originalObjectValue: any;
+
+                prepare(row: number, col: number, prop: string, td: any, originalValue: any, cellProperties: any) {
+                  this.originalObjectValue = originalValue;
+                  let editValue = "";
+
+                  if (originalValue && typeof originalValue === "object") {
+                    if (originalValue.surname) {
+                      editValue = String(originalValue.surname);
+                    } else {
+                      const voterSurname = originalValue.v || "";
+                      const relationSurname = originalValue.r || "";
+                      if (voterSurname && relationSurname) {
+                        editValue = `V: ${voterSurname} R: ${relationSurname}`;
+                      } else if (voterSurname) {
+                        editValue = `V: ${voterSurname}`;
+                      } else if (relationSurname) {
+                        editValue = `R: ${relationSurname}`;
+                      }
+                    }
+                  } else if (originalValue || originalValue === 0) {
+                    editValue = String(originalValue);
+                  }
+
+                  super.prepare(row, col, prop, td, editValue, cellProperties);
+                }
+
+                setValue(value: any) {
+                  let editValue = "";
+                  if (value && typeof value === "object") {
+                    if (value.surname) {
+                      editValue = String(value.surname);
+                    } else {
+                      const voterSurname = value.v || "";
+                      const relationSurname = value.r || "";
+                      if (voterSurname && relationSurname) {
+                        editValue = `V: ${voterSurname} R: ${relationSurname}`;
+                      } else if (voterSurname) {
+                        editValue = `V: ${voterSurname}`;
+                      } else if (relationSurname) {
+                        editValue = `R: ${relationSurname}`;
+                      }
+                    }
+                  } else if (value || value === 0) {
+                    editValue = String(value);
+                  }
+                  super.setValue(editValue);
+                }
+
+                getValue() {
+                  const rawValue = super.getValue();
+                  const inputValue = String(rawValue).trim();
+
+                  if (this.originalObjectValue && typeof this.originalObjectValue === "object") {
+                    const result = { ...this.originalObjectValue };
+                    const matchV = inputValue.match(/V:\s*([^R]*)/i);
+                    const matchR = inputValue.match(/R:\s*(.*)/i);
+
+                    if (matchV && matchV[1] !== undefined) {
+                      result.v = matchV[1].trim();
+                    }
+                    if (matchR && matchR[1] !== undefined) {
+                      result.r = matchR[1].trim();
+                    }
+
+                    if (!matchV && !matchR) {
+                      if (result.hasOwnProperty("surname")) {
+                        result.surname = inputValue;
+                      } else {
+                        result.v = inputValue;
+                      }
+                    }
+
+                    return result;
+                  }
+
+                  return inputValue;
+                }
               },
             }),
 
@@ -1219,6 +1956,22 @@ export default function LiveVoterListPage(): React.ReactElement {
       })()
       : [];
 
+  const tableWrapperStyle = !isGoClicked
+    ? { minHeight: "calc(100vh - 140px)", maxHeight: "calc(100vh - 61px)" }
+    : showMoreLiveVoterFilters === 2
+      ? { minHeight: "calc(100vh - 175px)", maxHeight: "calc(100vh - 125px)" }
+      : showMoreLiveVoterFilters === 1
+        ? { minHeight: "calc(100vh - 205px)", maxHeight: "calc(100vh - 100px)" }
+        : { minHeight: "calc(100vh - 175px)", maxHeight: "calc(100vh - 80px)" };
+
+  const hotTableHeight = !isGoClicked
+    ? "calc(100vh - 185px)"
+    : showMoreLiveVoterFilters === 2
+      ? "calc(100vh - 210px)"
+      : showMoreLiveVoterFilters === 1
+        ? "calc(100vh - 190px)"
+        : "calc(100vh - 141px)";
+
   return (
     <div className="live-voter-list-page h-screen flex flex-col overflow-hidden">
       {showSaveRibbon && (
@@ -1266,18 +2019,11 @@ export default function LiveVoterListPage(): React.ReactElement {
 
       <div
         className="flex-1 overflow-hidden bg-white z-0"
-        style={{ minHeight: "calc(100vh - 160px)", maxHeight: "calc(100vh - 120px)" }}
+        style={tableWrapperStyle}
       >
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-hidden">
-            {loading ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <div className="w-12 h-12 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-gray-700 font-medium">Loading data...</p>
-                </div>
-              </div>
-            ) : voterData.length === 0 ? (
+            {voterData.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center px-6 py-12">
                   <div className="mb-4">
@@ -1311,67 +2057,267 @@ export default function LiveVoterListPage(): React.ReactElement {
                   typeof col.title === "string" ? col.title : ""
                 )}
                 columns={columns}
+                afterDeselect={() => {
+                  const activeEl = document.activeElement as HTMLElement | null;
+                  const lookupEl = document.getElementById("hot-lookup-dropdown");
 
-                afterChange={(changes, source) => {
+                  // agar focus lookup ke andar hi hai to close mat karo
+                  if (lookupEl && activeEl && lookupEl.contains(activeEl)) {
+                    return;
+                  }
+
+                  detachEditorInputListener();
+
+                  setTimeout(() => {
+                    const currentActive = document.activeElement as HTMLElement | null;
+                    const currentLookup = document.getElementById("hot-lookup-dropdown");
+
+                    if (currentLookup && currentActive && currentLookup.contains(currentActive)) {
+                      return;
+                    }
+
+                    closeLookup();
+                  }, 120);
+                }}
+                beforeKeyDown={(event) => {
+                  const hot = hotTableRef.current?.hotInstance;
+                  if (!hot) return;
+
+                  const selected = hot.getSelectedLast?.();
+                  if (!selected) return;
+
+                  const [row, col] = selected;
+
+                  if (lookupState.open) {
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setLookupState((prev) => ({
+                        ...prev,
+                        activeIndex: Math.min(prev.activeIndex + 1, prev.items.length - 1),
+                      }));
+                      return false;
+                    }
+
+                    if (event.key === "ArrowUp") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setLookupState((prev) => ({
+                        ...prev,
+                        activeIndex: Math.max(prev.activeIndex - 1, 0),
+                      }));
+                      return false;
+                    }
+
+                    if (event.key === "Enter") {
+                      const selectedItem = lookupState.items[lookupState.activeIndex];
+                      if (selectedItem) {
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        handleLookupSelect(selectedItem);
+
+                        setTimeout(() => {
+                          const nextRow = row + 1;
+                          if (nextRow < hot.countRows()) {
+                            hot.selectCell(nextRow, col);
+                            hot.beginEditing();
+                          }
+                        }, 0);
+
+                        return false;
+                      }
+                    }
+
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      closeLookup();
+                      return false;
+                    }
+
+                    return;
+                  }
+
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    const nextRow = row + 1;
+                    if (nextRow < hot.countRows()) {
+                      hot.selectCell(nextRow, col);
+                      hot.beginEditing();
+                    }
+
+                    return false;
+                  }
+                }}
+                afterChange={(changes: any, source: any) => {
                   if (!changes || source === "loadData") return;
 
-                  setEditedRows((prev) => {
-                    const updated = { ...prev };
+                  setVoterData((prev: any) => {
+                    const updated = [...prev];
 
-                    changes.forEach(([rowIndex, prop, oldValue, newValue]: any) => {
-                      if (oldValue === newValue) return;
+                    (changes ?? []).forEach(
+                      ([row, prop, oldValue, newValue]: HotChangeTuple) => {
+                        if (!updated[row]) return;
+                        if (oldValue === newValue) return;
 
-                      const rowData = voterData[rowIndex];
-                      if (!rowData) return;
-
-                      const rowId: any = rowData.id;
-
-                      updated[rowId] = {
-                        ...(updated[rowId] || {
-                          id: rowData.id,
-                          data_id: rowData.data_id,
-                        }),
-                        [prop]: newValue,
-                      };
-                    });
+                        updated[row] = {
+                          ...updated[row],
+                          [String(prop)]: newValue,
+                        };
+                      }
+                    );
 
                     return updated;
                   });
                 }}
-
                 rowHeaders={(index) => {
                   const style = 'style="font-size:10px;text-align:center;height:10px;"';
                   return `<span ${style}>${index + 1}</span>`;
                 }}
+                // clicksToEdit={1}
+                enterBeginsEditing={true}
+                enterMoves={undefined}
+                afterBeginEditing={(row, col) => {
+                  const hot = hotTableRef.current?.hotInstance;
+                  if (!hot) return;
 
+                  const prop = hot.colToProp(col);
+
+                  if (prop === "castid" || prop === "castid_surname") {
+                    attachEditorInputListener(row, String(prop));
+                  } else {
+                    detachEditorInputListener();
+                    closeLookup();
+                  }
+                }}
                 width="100%"
-                height="calc(100vh - 195px)"
-
+                height={hotTableHeight}
                 wordWrap={false}
                 licenseKey="non-commercial-and-evaluation"
-
                 stretchH="all"
                 filters={false}
                 columnSorting={true}
-
                 manualColumnResize={true}
                 manualRowResize={true}
-
                 dropdownMenu={false}
                 contextMenu={true}
                 search={true}
                 comments={true}
-
                 fillHandle={true}
-
                 autoWrapRow={false}
                 autoWrapCol={false}
-
                 rowHeights={25}
                 autoColumnSize={true}
-
                 className="htCompact"
               />
+            )}
+            {lookupState.open && (
+              <div
+                id="hot-lookup-dropdown"
+                ref={null}
+                tabIndex={-1}
+                style={{
+                  position: "fixed",
+                  top: lookupState.top,
+                  left: lookupState.left,
+                  width: Math.max(lookupState.width, 320),
+                  maxHeight: 260,
+                  overflowY: "auto",
+                  zIndex: 999999,
+                  background: "#fff",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 8,
+                  boxShadow: "0 12px 28px rgba(15,23,42,0.18)",
+                  outline: "none",
+                }}
+                onKeyDown={(e) => {
+                  if (lookupState.items.length === 0) return;
+
+                  let newIndex = lookupState.activeIndex;
+
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    newIndex = Math.min(newIndex + 1, lookupState.items.length - 1);
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    newIndex = Math.max(newIndex - 1, 0);
+                  } else if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleLookupSelect(lookupState.items[lookupState.activeIndex]);
+                    return;
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    closeLookup();
+                    return;
+                  }
+
+                  if (newIndex !== lookupState.activeIndex) {
+                    setLookupState((prev) => ({
+                      ...prev,
+                      activeIndex: newIndex,
+                    }));
+                  }
+                }}
+              >
+                {lookupState.loading ? (
+                  <div className="px-3 py-2 text-sm text-slate-500">Loading...</div>
+                ) : lookupState.items.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-slate-500">No suggestions</div>
+                ) : lookupState.prop === "castid" ? (
+                  lookupState.items.map((item, index) => {
+                    const row = item as CastLookupItem;
+                    return (
+                      <button
+                        key={`${row.castid}-${row.data_id}-${index}`}
+                        type="button"
+                        className="w-full text-left px-3 py-2 border-b border-slate-100 last:border-b-0"
+                        style={{
+                          background: lookupState.activeIndex === index ? "#eff6ff" : "#fff",
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleLookupSelect(row);
+                        }}
+                      >
+                        <div className="text-sm font-medium text-slate-800">{row.castid || "-"}</div>
+                        <div className="text-xs text-slate-600">{row.caste || "-"}</div>
+                        <div className="text-[11px] text-slate-500 mt-1">
+                          {row.cast_cat || "-"} | {row.religion || "-"}
+                        </div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  lookupState.items.map((item, index) => {
+                    const row = item as CastSurnameLookupItem;
+                    return (
+                      <button
+                        key={`${row.castid_surname}-${row.surname}-${row.data_id}-${index}`}
+                        type="button"
+                        className="w-full text-left px-3 py-2 border-b border-slate-100 last:border-b-0"
+                        style={{
+                          background: lookupState.activeIndex === index ? "#eff6ff" : "#fff",
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleLookupSelect(row);
+                        }}
+                      >
+                        <div className="text-sm font-medium text-slate-800">
+                          {row.castid_surname || "-"}
+                        </div>
+                        <div className="text-xs text-slate-600">{row.surname || "-"}</div>
+                        <div className="text-[11px] text-slate-500 mt-1">
+                          {row.subcast || "-"} | oldnew: {row.oldnew ?? "-"}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             )}
           </div>
 

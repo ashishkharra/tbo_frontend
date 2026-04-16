@@ -16,7 +16,7 @@ import { useAuth } from "../../../contexts/AuthContext";
 import LiveVoterListNavbar from "@/components/LiveVoterListNavbar";
 import { apiService } from "../../../services/api";
 import { useSharedDataId } from "../../hook/useSharedDataId";
-import axiosInstance, { generateIdsApi, generateSurnamesApi, syncSurnameApi } from "@/apis/api";
+import axiosInstance, { generateIdsApi, generateSurnamesApi, getMultipleDataCountsApi, inactiveDataIdApi, syncDeleteDataIdApi, syncSurnameApi } from "@/apis/api";
 
 // Define the interface locally since it's not exported from LiveMasterFilter
 interface LiveMasterFilterValues {
@@ -184,8 +184,10 @@ export default function LiveVoterListImportExportPage() {
   const [castIdResult, setCastIdResult] = useState<CastIdResponse | null>(null);
   const [selectedDataIds, setSelectedDataIds] = useState<string[]>([]);
   const [addImportRowClicked, setImportRowClicked] = useState<boolean>(false);
+  const [generatingCounts, setGeneratingCounts] = useState<boolean>(false);
 
   const isDisabled =
+    generatingCounts ||
     generatingIds ||
     generatingFamilyIds ||
     generatingFamilySurname ||
@@ -432,6 +434,110 @@ export default function LiveVoterListImportExportPage() {
     }
   };
 
+  const handleDeleteDataIds = async () => {
+    if (selectedDataIds.length === 0) {
+      alert("Please select at least one row.");
+      return;
+    }
+
+    if (
+      !confirm(
+        `This will DELETE all data for selected Data IDs: ${selectedDataIds.join(
+          ", "
+        )}.\n\nThis action cannot be undone. Continue?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const result = await syncDeleteDataIdApi({
+        data_ids: selectedDataIds.map(Number),
+      });
+
+      if (result.success) {
+        alert("Data deleted successfully");
+
+        // optional: refresh table
+        // reloadData();
+
+      } else {
+        alert(`Error: ${result.message}`);
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Something went wrong");
+    }
+  };
+
+  const handleInactiveDataIds = async (dataIds?: string[]) => {
+    const idsToInactive =
+      dataIds && dataIds.length > 0 ? dataIds : selectedDataIds;
+
+    if (idsToInactive.length === 0) {
+      alert("Please select at least one row.");
+      return;
+    }
+
+    if (
+      !confirm(
+        `This will INACTIVATE selected Data IDs: ${idsToInactive.join(
+          ", "
+        )}.\n\nContinue?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const result = await inactiveDataIdApi({
+        data_ids: idsToInactive.map(Number),
+      });
+
+      if (result.success) {
+        alert(result.message || "Data IDs inactivated successfully");
+        window.location.reload();
+      } else {
+        alert(`Error: ${result.message}`);
+      }
+    } catch (error) {
+      console.error("Inactive error:", error);
+      alert("Something went wrong");
+    }
+  };
+
+  const handleGenerateCounts = async () => {
+    if (selectedDataIds.length === 0) {
+      alert("Please select at least one row from the import sessions table.");
+      return;
+    }
+
+    try {
+      setGeneratingCounts(true);
+
+      const result = await getMultipleDataCountsApi({
+        data_ids: selectedDataIds.map(Number),
+      });
+
+      if (result.success) {
+        alert(
+          result.message ||
+          `Counts generated successfully for ${selectedDataIds.length} data IDs.`
+        );
+      } else {
+        alert(`Error: ${result.message}`);
+      }
+    } catch (error) {
+      console.error("Error generating counts:", error);
+      alert(
+        `Error generating counts: ${error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    } finally {
+      setGeneratingCounts(false);
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Header with Master Filter - just render the component without props */}
@@ -459,13 +565,33 @@ export default function LiveVoterListImportExportPage() {
             <div className="mb-6 pb-4 border-b border-gray-200">
               <div className="flex items-center justify-end">
                 <div className="flex items-center gap-3">
+
+                  <button
+                    onClick={handleGenerateCounts}
+                    disabled={isDisabled}
+                    className={`flex items-center gap-2 px-4 py-2 rounded transition-colors duration-200 font-medium text-sm
+        ${isDisabled
+                        ? "bg-gray-400 cursor-not-allowed"
+                        : "bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer"
+                      }`}
+                    title={tooltip}
+                  >
+                    <RefreshCw
+                      size={16}
+                      className={generatingIds ? "animate-spin" : ""}
+                    />
+                    <span>
+                      {generatingIds ? "Generating..." : "Generate count"}
+                    </span>
+                  </button>
+
                   <button
                     onClick={handleGenerateIds}
                     disabled={isDisabled}
                     className={`flex items-center gap-2 px-4 py-2 rounded transition-colors duration-200 font-medium text-sm
         ${isDisabled
                         ? "bg-gray-400 cursor-not-allowed"
-                        : "bg-gray-600 text-white hover:bg-gray-700 cursor-pointer"
+                        : "bg-blue-600 text-white hover:bg-blue-700 cursor-pointer"
                       }`}
                     title={tooltip}
                   >
@@ -483,7 +609,7 @@ export default function LiveVoterListImportExportPage() {
                     className={`flex items-center gap-2 px-4 py-2 rounded transition-colors duration-200 font-medium text-sm
         ${isDisabled
                         ? "bg-gray-400 cursor-not-allowed"
-                        : "bg-gray-600 text-white hover:bg-gray-700 cursor-pointer"
+                        : "bg-purple-600 text-white hover:bg-purple-700 cursor-pointer"
                       }`}
                     title={tooltip}
                   >
@@ -502,7 +628,7 @@ export default function LiveVoterListImportExportPage() {
                     disabled={
                       generatingFamilyIds || selectedDataIds.length === 0
                     }
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors duration-200 font-medium text-sm cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700 transition-colors duration-200 font-medium text-sm cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
                     title={
                       selectedDataIds.length === 0
                         ? "Please select at least one row from the import sessions table"
@@ -522,7 +648,7 @@ export default function LiveVoterListImportExportPage() {
                   <button
                     onClick={handleCastIdOnFamily}
                     disabled={applyingCastId || selectedDataIds.length === 0}
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors duration-200 font-medium text-sm cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors duration-200 font-medium text-sm cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
                     title={
                       selectedDataIds.length === 0
                         ? "Please select at least one row from the import sessions table"
@@ -542,7 +668,7 @@ export default function LiveVoterListImportExportPage() {
                     disabled={
                       applyingCastIdBySurname || selectedDataIds.length === 0
                     }
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors duration-200 font-medium text-sm cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors duration-200 font-medium text-sm cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
                     title={
                       selectedDataIds.length === 0
                         ? "Please select at least one row from the import sessions table"
@@ -574,7 +700,7 @@ export default function LiveVoterListImportExportPage() {
                         });
                       }
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors duration-200 font-medium text-sm cursor-pointer"
+                    className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors duration-200 font-medium text-sm cursor-pointer"
                   >
                     <span>+ Add Import Row</span>
                   </button>
@@ -634,6 +760,8 @@ export default function LiveVoterListImportExportPage() {
               <NewImportExportData
                 onSelectedRowsChange={setSelectedDataIds}
                 setImportRowClicked={setImportRowClicked}
+                onDeleteDataIds={handleDeleteDataIds}
+                onInactiveDataIds={handleInactiveDataIds}
               />
             </div>
           </div>

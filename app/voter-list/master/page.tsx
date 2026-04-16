@@ -67,6 +67,7 @@ interface ApiResponse {
 
 export default function DropdownMasterPage() {
   const hotTableRef = useRef<any>(null);
+  const selectedPhysicalRowRef = useRef<number | null>(null);
 
   const [data, setData] = useState<DataItem[]>([]);
   const [columns, setColumns] = useState<ColumnSettings[]>([]);
@@ -100,6 +101,10 @@ export default function DropdownMasterPage() {
   const [importLoading, setImportLoading] = useState(false);
   const [insertLoading, setInsertLoading] = useState(false);
   const [showInsertModal, setShowInsertModal] = useState(false);
+
+  useEffect(() => {
+    selectedPhysicalRowRef.current = selectedRowIndex;
+  }, [selectedRowIndex]);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState<number | 'All'>(50);
@@ -219,6 +224,33 @@ export default function DropdownMasterPage() {
     return initial;
   };
 
+  // Helper function to format array/object values for display
+  const formatArrayOrObjectValue = (value: any): string => {
+    if (value === null || value === undefined) return '-';
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '-';
+      return value.map(item => {
+        if (typeof item === 'object' && item !== null) {
+          return JSON.stringify(item);
+        }
+        return String(item);
+      }).join(', ');
+    }
+
+    if (typeof value === 'object') {
+      return JSON.stringify(value);
+    }
+
+    return String(value);
+  };
+
+  // Helper function to truncate text
+  const truncateText = (text: string, maxLength: number = 30): string => {
+    if (!text || text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  };
+
   useEffect(() => {
     setSelectedDataId('');
     setSelectedStatus('');
@@ -313,11 +345,39 @@ export default function DropdownMasterPage() {
               };
             }
 
+            // Special handling for data_range or any array/object columns
+            if (key === 'data_range' || key.includes('range')) {
+              return {
+                data: key,
+                title: key.replace(/_/g, ' ').toUpperCase(),
+                width: 200,
+                className: 'htCenter htMiddle',
+                renderer: (_instance, td, _row, _col, _prop, value) => {
+                  const formattedValue = formatArrayOrObjectValue(value);
+                  const truncatedValue = truncateText(formattedValue, 30);
+
+                  td.textContent = truncatedValue;
+                  td.className = 'htCenter htMiddle';
+                  td.title = formattedValue; // Full value on hover
+                  td.style.cursor = 'help';
+                  td.style.overflow = 'hidden';
+                  td.style.textOverflow = 'ellipsis';
+                  td.style.whiteSpace = 'nowrap';
+
+                  return td;
+                }
+              };
+            }
+
             return {
               data: key,
               title: key.replace(/_/g, ' ').toUpperCase(),
               width: 120,
-              className: 'htCenter htMiddle'
+              className: 'htCenter htMiddle',
+              readOnly:
+                key === 'id' ||
+                key === 'is_active' ||
+                key === 'data_range'
             };
           });
 
@@ -472,6 +532,7 @@ export default function DropdownMasterPage() {
     try {
       const updates = { ...selectedRowData };
       delete updates.id;
+      delete updates.data_id;
 
       const response = await saveMasterPatchApi({
         table: selectedDropdown,
@@ -592,6 +653,11 @@ export default function DropdownMasterPage() {
       return;
     }
 
+    if (selectedDropdown === 'dataid_importmaster') {
+      alert('Add row is not allowed for Data ID Import Master');
+      return;
+    }
+
     if (!selectedDataId) {
       alert('Please select a Data ID first');
       return;
@@ -644,14 +710,14 @@ export default function DropdownMasterPage() {
     <div className="min-h-screen bg-[#f8fafc]">
       <div className="bg-gray-100 border-b border-gray-200 px-6 pt-1 flex-shrink-0">
         <div className="w-full flex items-center gap-6">
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 py-1 px-6">
             <LiveMasterFilter />
           </div>
         </div>
       </div>
 
       <div>
-        <div className="bg-white border rounded-lg px-4">
+        <div className="bg-white border rounded-lg px-12">
           <div className="flex items-end gap-3 pb-2 pt-0 flex-wrap">
             <div className="w-[200px]">
               <select
@@ -668,7 +734,7 @@ export default function DropdownMasterPage() {
               </select>
             </div>
 
-            <div className="w-[140px]">
+            <div className="w-fit">
               <select
                 className="w-full mt-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-700"
                 value={selectedDataId}
@@ -746,7 +812,7 @@ export default function DropdownMasterPage() {
               />
             </div>
 
-            {selectedDataId && (
+            {selectedDataId && !isImportMaster && (
               <div className="flex gap-2 items-center">
                 <input
                   placeholder="Count"
@@ -769,7 +835,7 @@ export default function DropdownMasterPage() {
                       <span>Adding...</span>
                     </>
                   ) : (
-                    'ADD ROW'
+                    "ADD ROW"
                   )}
                 </button>
               </div>
@@ -788,7 +854,7 @@ export default function DropdownMasterPage() {
             {!isImportMaster && (
               <button
                 onClick={handleDelete}
-                // disabled={isAnyActionLoading || !selectedDropdown || !selectedRowData}
+                disabled={isAnyActionLoading || !selectedDropdown || !selectedRowData}
                 className="h-8 w-10 flex items-center justify-center rounded-md text-white bg-gray-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
                 title={selectedRowData ? 'Delete selected row' : 'Select a row first'}
               >
@@ -803,25 +869,27 @@ export default function DropdownMasterPage() {
             <button
               onClick={handleDownload}
               disabled={isAnyActionLoading || !selectedDropdown}
-              className="h-8 w-10 flex items-center justify-center rounded-md text-white bg-gray-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
+              className="h-8 w-fit px-2 flex gap-1.5 items-center justify-center rounded-md text-white bg-yellow-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
             >
               {downloadLoading ? (
                 <Loader2 size={14} className="animate-spin" />
               ) : (
                 <Download size={14} />
               )}
+              <span>Download</span>
             </button>
 
             <button
               onClick={handleSave}
               disabled={isAnyActionLoading || !selectedDropdown}
-              className="h-8 w-10 flex items-center justify-center rounded-md text-white bg-gray-700 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
+              className="h-8 w-fit flex gap-1.5 px-2 items-center justify-center rounded-md text-white bg-green-600 hover:opacity-90 cursor-pointer disabled:bg-gray-200 disabled:cursor-not-allowed"
             >
               {templateLoading ? (
                 <Loader2 size={14} className="animate-spin" />
               ) : (
                 <FileText size={14} />
               )}
+              <span>Save</span>
             </button>
 
             <input
@@ -849,13 +917,6 @@ export default function DropdownMasterPage() {
           </div>
         </div>
 
-        {selectedRowData && (
-          <div className="mt-2 px-1 text-sm text-gray-600">
-            Selected Row: <span className="font-medium">ID {selectedRowData.id}</span>
-            {' '}| Data ID: <span className="font-medium">{selectedRowData.data_id}</span>
-          </div>
-        )}
-
         {loading ? (
           <div className="mt-4 border rounded-lg p-8 flex items-center justify-center">
             <div className="flex flex-col items-center gap-2">
@@ -864,47 +925,98 @@ export default function DropdownMasterPage() {
             </div>
           </div>
         ) : data.length > 0 ? (
-          <div className="mt-2 border rounded-lg overflow-hidden z-0">
-            <HotTable
-              ref={hotTableRef}
-              data={data}
-              columns={columns}
-              colHeaders={true}
-              rowHeaders={true}
-              width="100%"
-              height={data.length === 0 ? 100 : Math.min(data.length * 42 + 50, 590)}
-              licenseKey="non-commercial-and-evaluation"
-              stretchH="all"
-              manualColumnResize={true}
-              columnSorting={true}
-              contextMenu={false}
-              copyPaste={true}
-              outsideClickDeselects={false}
-              autoWrapRow={true}
-              autoWrapCol={true}
-              wordWrap={false}
-              selectionMode="range"
-              currentRowClassName="currentRow"
-              currentColClassName="currentCol"
-              afterSelection={(row) => {
-                const hot = hotTableRef.current?.hotInstance;
-                if (!hot) return;
+          <div className="mt-2 border rounded-lg overflow-hidden">
+            <div className='h-[83vh]'>
+              <HotTable
+                ref={hotTableRef}
+                data={data}
+                columns={columns}
+                colHeaders={true}
+                rowHeaders={true}
+                width="100%"
+                height={data.length === 0 ? 100 : Math.min(data.length * 42 + 50, 690)}
+                licenseKey="non-commercial-and-evaluation"
+                stretchH="all"
+                manualColumnResize={true}
+                columnSorting={true}
+                contextMenu={false}
+                copyPaste={true}
+                outsideClickDeselects={false}
+                autoWrapRow={true}
+                autoWrapCol={true}
+                wordWrap={false}
+                selectionMode="range"
+                currentRowClassName="currentRow"
+                currentColClassName="currentCol"
+                afterSelectionEnd={(row) => {
+                  const hot = hotTableRef.current?.hotInstance;
+                  if (!hot) return;
 
-                const physicalRow = hot.toPhysicalRow(row);
-                console.log("pysix", physicalRow)
-                if (
-                  physicalRow !== null &&
-                  physicalRow !== undefined &&
-                  physicalRow >= 0 &&
-                  data[physicalRow]
-                ) {
+                  const physicalRow = hot.toPhysicalRow(row);
+
+                  if (
+                    physicalRow === null ||
+                    physicalRow === undefined ||
+                    physicalRow < 0 ||
+                    !data[physicalRow]
+                  ) {
+                    return;
+                  }
+
+                  if (selectedPhysicalRowRef.current === physicalRow) {
+                    return;
+                  }
+
+                  selectedPhysicalRowRef.current = physicalRow;
                   setSelectedRowIndex(physicalRow);
                   setSelectedRowData(data[physicalRow]);
-                }
-              }}
-              afterDeselect={() => { }}
-              className="htCenter htMiddle"
-            />
+                }}
+                afterChange={(changes, source) => {
+                  if (!changes || source === "loadData") return;
+
+                  setData((prevData) => {
+                    const updatedData = [...prevData];
+
+                    changes.forEach(([row, prop, oldValue, newValue]) => {
+                      if (oldValue === newValue) return;
+
+                      const hot = hotTableRef.current?.hotInstance;
+                      const physicalRow =
+                        hot && typeof row === "number" ? hot.toPhysicalRow(row) : row;
+
+                      if (
+                        physicalRow !== null &&
+                        physicalRow !== undefined &&
+                        physicalRow >= 0 &&
+                        updatedData[physicalRow]
+                      ) {
+                        updatedData[physicalRow] = {
+                          ...updatedData[physicalRow],
+                          [String(prop)]: newValue
+                        };
+                      }
+                    });
+
+                    if (
+                      selectedRowIndex !== null &&
+                      selectedRowIndex !== undefined &&
+                      updatedData[selectedRowIndex]
+                    ) {
+                      setSelectedRowData(updatedData[selectedRowIndex]);
+                    }
+
+                    return updatedData;
+                  });
+                }}
+                afterDeselect={() => {
+                  if (selectedPhysicalRowRef.current === null) return;
+                  selectedPhysicalRowRef.current = null;
+                  setSelectedRowIndex(null);
+                  setSelectedRowData(null);
+                }}
+                className="htCenter htMiddle"
+              />
+            </div>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-[calc(100vh-260px)] text-center">

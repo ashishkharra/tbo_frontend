@@ -105,3 +105,20 @@ body {
 .dark .handsontable .current {
   background-color: #1f2937 !important;
 }
+.handsontable,
+.handsontable .wtHolder,
+.handsontable .wtHider,
+.handsontable .wtSpreader {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.handsontable::-webkit-scrollbar,
+.handsontable .wtHolder::-webkit-scrollbar,
+.handsontable .wtHider::-webkit-scrollbar,
+.handsontable .wtSpreader::-webkit-scrollbar {
+  display: none !important;
+  height: 0 !important;
+  width: 0 !important;
+}
+

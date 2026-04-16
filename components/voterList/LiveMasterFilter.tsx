@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { RefreshCw } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import { LogOut, Power, RefreshCw } from "lucide-react";
 import { SearchableSelect } from "./SearchableSelect";
 import { QuickMenuPopup } from "./QuickMenuPopup";
 import { volterListMasterFilter } from "@/apis/api";
@@ -36,9 +36,9 @@ interface ApiResponse {
 }
 
 export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
-  const { logout } = useAuthContext();
+  const { user, logout } = useAuthContext();
   const router = useRouter();
-  const pathname: any = usePathname();
+  const pathname: any = usePathname()
   const containerRef = useRef<HTMLDivElement>(null);
   const quickMenuButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -50,8 +50,6 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
 
   const [masterData, setMasterData] = useState<Record<string, MasterFilterItem[]>>({});
   const [allItems, setAllItems] = useState<MasterFilterItem[]>([]);
-
-  const [dataIdOptions, setDataIdOptions] = useState<string[]>([]);
 
   const [districtOptions, setDistrictOptions] = useState<Array<{ id: number, name: string }>>([]);
   const [assemblyOptions, setAssemblyOptions] = useState<string[]>([]);
@@ -140,7 +138,6 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
             }
           });
 
-          setDataIdOptions(Array.from(dataIdSet));
           setPartyDistrictOptions(Array.from(partyDistrictSet));
           setDistrictOptions(
             Array.from(districtSet).map(s => {
@@ -168,11 +165,30 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
     return parts[parts.length - 1].trim();
   };
 
+  const getDataIdDisplayOptions = (): Array<{ id: string; display: string; searchText: string }> => {
+    const optionMap = new Map<string, string>();
+
+    allItems.forEach((item) => {
+      if (!item.data_id) return;
+      const id = String(item.data_id);
+      const name = String(item.data_id_name_hi || "").trim();
+
+      if (!optionMap.has(id)) {
+        optionMap.set(id, name ? `${id} - ${name}` : id);
+      }
+    });
+
+    return Array.from(optionMap.entries()).map(([id, display]) => ({
+      id,
+      display,
+      searchText: display.toLowerCase(),
+    }));
+  };
+
   const getFilteredOptions = (key: string): string[] => {
     const results = new Set<string>();
 
     allItems.forEach(item => {
-      if (key === "dataId" && item.data_id) results.add(`${item.data_id}`);
       if (key === "partyDistrict" && item.party_district_id && item.party_district_hi) results.add(`${item.party_district_hi} - ${item.party_district_id}`);
       if (key === "district" && item.district_id && item.district_hi) results.add(`${item.district_hi} - ${item.district_id}`);
       if (key === "assembly" && item.ac_no && item.ac_name_hi) results.add(`${item.ac_name_hi} - ${item.ac_no}`);
@@ -204,7 +220,7 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
     });
 
     if (match) {
-      setSelectedDataId(`${match.data_id}`);
+      setSelectedDataId(match.data_id ? String(match.data_id) : "");
       setSelectedPartyDistrict(match.party_district_hi && match.party_district_id ? `${match.party_district_hi} - ${match.party_district_id}` : "");
       setSelectedDistrict(match.district_hi && match.district_id ? `${match.district_hi} - ${match.district_id}` : "");
       setSelectedAssembly(match.ac_name_hi && match.ac_no ? `${match.ac_name_hi} - ${match.ac_no}` : "");
@@ -231,7 +247,7 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
       };
 
       if (selectedDataId) {
-        params.data_id = parseInt(extractId(selectedDataId), 10);
+        params.data_id = parseInt(selectedDataId, 10);
       }
 
       if (selectedPartyDistrict) {
@@ -314,7 +330,7 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
                 id="dataId"
                 value={selectedDataId}
                 onChange={(val) => handleFilterSelection("dataId", val)}
-                options={getFilteredOptions("dataId")}
+                options={getDataIdDisplayOptions()}
                 placeholder="डेटा आईडी"
                 label=""
                 disabled={loading}
@@ -386,8 +402,8 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
                 onClick={handleApplyFilters}
                 disabled={!isAnyFilterSelected || applying}
                 className={`flex items-center justify-center space-x-0.5 px-0.5 rounded font-medium text-sm w-12 h-[28px] ${isAnyFilterSelected && !applying
-                    ? "bg-gray-600 text-white hover:bg-gray-700 cursor-pointer"
-                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  ? "bg-gray-600 text-white hover:bg-gray-700 cursor-pointer"
+                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }`}
               >
                 {applying ? (
@@ -397,13 +413,15 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
                 )}
               </button>
 
-              <button
-                onClick={handleRefresh}
-                disabled={applying}
-                className="flex items-center justify-center p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200 cursor-pointer h-[38px] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <RefreshCw size={16} />
-              </button>
+              {pathname === '/voter-list/import-data' && (
+                <button
+                  onClick={handleRefresh}
+                  disabled={applying}
+                  className="flex items-center justify-center p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors duration-200 cursor-pointer h-[38px] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RefreshCw size={16} />
+                </button>
+              )}
 
               <button
                 ref={quickMenuButtonRef}
@@ -412,7 +430,7 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
                 // onMouseLeave={() => setMenuPopupOpen(false)}
                 onClick={() => setMenuPopupOpen((prev) => !prev)}
                 disabled={applying}
-                className="group relative flex items-center justify-center h-[42px] w-[42px] rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-[1px] hover:border-slate-300 hover:bg-white hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group relative ml-7 flex cursor-pointer items-center justify-center h-[35px] w-[35px] rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-[1px] hover:border-slate-300 hover:bg-white hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-slate-50 via-white to-slate-100 opacity-100" />
                 <div className="relative grid grid-cols-2 grid-rows-2 gap-[3px] w-[18px] h-[18px]">
@@ -426,28 +444,28 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
           </div>
 
           <div className="flex items-center gap-3 flex-shrink-0">
-            <div className="relative flex items-center gap-2 flex-shrink-0">
-              <span className="text-sm font-medium text-gray-700 uppercase">
-                ADMIN
-              </span>
-              <button
-                onClick={() => setLogoutDropdownOpen(!logoutDropdownOpen)}
-                className="flex items-center justify-center p-1.5 text-gray-700 hover:text-gray-900 hover:bg-gray-200 rounded-md transition-colors duration-200"
-              >
-                <img src="/logout.png" alt="logout" className="w-4 h-4" />
-              </button>
-
-              {logoutDropdownOpen && (
-                <div className="absolute top-full right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[120px] z-50">
-                  <button
-                    onClick={handleLogout}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
-                  >
-                    <img src="/logout.png" alt="logout" className="w-4 h-4" />
-                    <span>Logout</span>
-                  </button>
+            <div className="flex items-center space-x-3">
+              {/* User Info */}
+              <div className="hidden md:flex flex-col items-end">
+                <div className="flex items-center flex-col space-x-2">
+                  <span className="font-bold uppercase text-[12px] text-gray-900">{user?.username}</span>
+                  <span className="text-xs font-extralight text-blue-800 rounded-full capitalize">
+                    {user?.role?.replace('_', ' ')}
+                  </span>
                 </div>
-              )}
+              </div>
+
+              {/* Logout Button */}
+              <button
+                onClick={() => {
+                  logout();
+                  router.push('/login');
+                }}
+                className="flex items-center border space-x-2 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors duration-200"
+                title="Logout"
+              >
+                <Power className="w-4 h-4 cursor-pointer font-bold" size={28} />
+              </button>
             </div>
           </div>
         </div>
@@ -458,9 +476,6 @@ export const LiveMasterFilter: React.FC<Props> = ({ onApplyFilters }) => {
           anchorRef={quickMenuButtonRef}
         />
       </div>
-      {pathname !== '/voter-list' && (
-        <DynamicPageSubMenu />
-      )}
     </>
   );
 };

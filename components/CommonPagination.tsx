@@ -103,8 +103,7 @@ export default function CommonPagination({
 
   return (
     <div
-      className="bg-white px-2 py-1 border-t border-gray-200 flex-shrink-0 fixed bottom-0 left-0 right-0 z-50"
-      style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50 }}
+      className="bg-white px-2 py-1 border-t border-gray-200 flex-shrink-0 w-full z-30"
     >
       <div className="flex flex-col sm:flex-row justify-between items-center text-sm text-gray-700 space-y-1 sm:space-y-0">
         <div className="text-center sm:text-left">
@@ -134,7 +133,7 @@ export default function CommonPagination({
                   : proposedEnd;
                 return `${startRow} to ${endRow}`;
               })()} entries</span>
-              {itemsPerPage !== 'All' && ![5, 10, 15, 20, 25, 30, 50, 100, 250, 500, 1000, 2000, 5000].includes(Number(itemsPerPage)) && (
+              {itemsPerPage !== 'All' && ![50, 100, 500, 1000, 2000, 5000].includes(Number(itemsPerPage)) && (
                 <span className="text-blue-600 text-xs ml-1">(Auto)</span>
               )}
               <span> of {totalItems}</span>
@@ -258,20 +257,13 @@ export default function CommonPagination({
               disabled={loading}
             >
               {/* Standard options */}
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={15}>15</option>
-              <option value={20}>20</option>
-              <option value={25}>25</option>
-              <option value={30}>30</option>
               <option value={50}>50</option>
               <option value={100}>100</option>
-              <option value={250}>250</option>
               <option value={500}>500</option>
               <option value={1000}>1000</option>
               <option value={2000}>2000</option>
               <option value={5000}>5000</option>
-              <option value="All">All</option>
+              {/* <option value="All">All</option> */}
               {/* Dynamic option for calculated value if not in standard list and not 'All' */}
               {itemsPerPage !== 'All' && ![5, 10, 15, 20, 25, 30, 50, 100, 250, 500, 1000, 2000, 5000].includes(Number(itemsPerPage)) && (
                 <option value={itemsPerPage}>{itemsPerPage} (Auto)</option>

@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { User, Shield, Activity, Smartphone, ChevronDown, LogOut, Settings, BarChart3, FileText, Database, Users, X, AlertTriangle } from 'lucide-react';
+import { User, Shield, Activity, Smartphone, ChevronDown, LogOut, Settings, BarChart3, FileText, Database, Users, X, AlertTriangle, Power } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth as useAuthContext } from '@/contexts/AuthContext';
 import { apiService } from '../services/api';
 
 export default function TBOUserNavbar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, logout, loading } = useAuth();
+  const { user, logout } = useAuthContext();
   const [showMenu, setShowMenu] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -66,7 +66,7 @@ export default function TBOUserNavbar() {
   };
 
   return (
-    <div className="bg-white shadow-sm border-b border-gray-200">
+    <div className="bg-white shadow-sm">
       <div className="w-full px-4 py-3">
         <div className="flex items-center justify-between">
           {/* Logo Section - Left Side */}
@@ -150,9 +150,33 @@ export default function TBOUserNavbar() {
             </div>
           </div>
 
-          {/* Empty Right Side - User section moved to page */}
-          <div className="flex items-center space-x-3 flex-shrink-0">
-            {/* User section is now in the page filter area */}
+          {/* User Information Section - Right Side */}
+          <div className="flex items-center space-x-4 flex-shrink-0">
+            {user && (
+              <div className="flex items-center space-x-3">
+                {/* User Info */}
+                <div className="hidden md:flex flex-col items-end">
+                  <div className="flex items-center flex-col space-x-2">
+                    <span className="font-bold uppercase text-[12px] text-gray-900">{user.username}</span>
+                    <span className="text-xs font-extralight text-blue-800 rounded-full capitalize">
+                      {user.role?.replace('_', ' ')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Logout Button */}
+                <button
+                  onClick={() => {
+                    logout();
+                    router.push('/login');
+                  }}
+                  className="flex items-center border space-x-2 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors duration-200"
+                  title="Logout"
+                >
+                  <Power className="w-4 h-4 cursor-pointer font-bold" size={28}/>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

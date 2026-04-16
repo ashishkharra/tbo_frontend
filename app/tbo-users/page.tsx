@@ -47,6 +47,8 @@ import {
   ClipboardPaste,
 } from "lucide-react";
 import Link from "next/link";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import TBOUserNavbar from "../../components/TBOUserNavbar";
 
 import exportQueueService from "../../services/exportQueueService";
@@ -108,6 +110,153 @@ const useModulesCodeMap = () => {
   return map;
 };
 
+const formatUsername = (username: string): string => {
+  const value = String(username || "").trim();
+  if (!value) return "";
+  return value
+    .split(" ")
+    .map((part) =>
+      part ? part.charAt(0).toUpperCase() + part.slice(1).toLowerCase() : ""
+    )
+    .join(" ");
+};
+
+type FilterOption = {
+  value: string;
+  label: string;
+  searchText?: string;
+};
+
+const SearchableFilterSelect = ({
+  value,
+  onChange,
+  options,
+  placeholder,
+  disabled,
+  id,
+  activeDropdown,
+  onDropdownToggle,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: FilterOption[];
+  placeholder: string;
+  disabled?: boolean;
+  id: string;
+  activeDropdown: string | null;
+  onDropdownToggle: (id: string | null) => void;
+  className?: string;
+}) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const isOpen = activeDropdown === id;
+
+  const filteredOptions = useMemo(() => {
+    const lower = searchTerm.toLowerCase();
+    return options.filter((option) => {
+      const haystack = (option.searchText || option.label || "").toLowerCase();
+      return haystack.includes(lower);
+    });
+  }, [options, searchTerm]);
+
+  const selectedOption = options.find((opt) => opt.value === value);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        onDropdownToggle(null);
+        setSearchTerm("");
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen, onDropdownToggle]);
+
+  return (
+    <div
+      ref={dropdownRef}
+      className={`relative ${className || ""}`.trim()}
+      data-dropdown-id={id}
+    >
+      <button
+        type="button"
+        onClick={() => {
+          if (disabled) return;
+          onDropdownToggle(isOpen ? null : id);
+          setSearchTerm("");
+        }}
+        disabled={disabled}
+        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white text-left flex items-center justify-between min-w-0"
+      >
+        <span className="truncate flex-1 min-w-0 text-sm text-gray-900">
+          {selectedOption?.label || placeholder}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`text-gray-500 ml-2 transition-transform ${
+            isOpen ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-[9999] w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-hidden min-w-[220px]">
+          <div className="p-2 border-b border-gray-200">
+            <div className="relative">
+              <Search
+                size={14}
+                className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"
+              />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search..."
+                className="w-full pl-8 pr-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          <div className="max-h-48 overflow-y-auto">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((option) => (
+                <button
+                  key={`${id}-${option.value}`}
+                  type="button"
+                  onClick={() => {
+                    onChange(option.value);
+                    onDropdownToggle(null);
+                    setSearchTerm("");
+                  }}
+                  className={`w-full px-3 py-2 text-left text-xs hover:bg-gray-100 ${
+                    option.value === value ? "bg-gray-100 font-semibold" : ""
+                  }`}
+                  title={option.label}
+                >
+                  {option.label}
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-xs text-gray-500">No matching options</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const AssignmentTokenCell = ({ tokens }: { tokens: string[] }) => {
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
@@ -122,33 +271,33 @@ const AssignmentTokenCell = ({ tokens }: { tokens: string[] }) => {
     }
   };
 
-    return (
-      <div className="flex flex-wrap gap-1 items-center max-w-full">
-        {tokens.map((token, index) => (
-          <div key={index} className="flex items-center gap-1 text-xs shrink-0">
-            <span
-              title={token}
-              className="truncate max-w-[100px] font-mono text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-800"
-            >
-              {token}
-            </span>
-            <button
-              className="p-0.5 hover:bg-gray-200 rounded transition-colors shrink-0"
-              title="Copy token"
-              onClick={() => handleCopyToken(token)}
-            >
-              {copiedToken === token ? (
-                <Check className="w-3 h-3 text-green-600" />
-              ) : (
-                <Copy className="w-3 h-3 text-red-500" />
-                
-              )}
-            </button>
-            
-          </div>
-        ))}
-      </div>
-    );
+  return (
+    <div className="flex flex-wrap gap-1 items-center max-w-full">
+      {tokens.map((token, index) => (
+        <div key={index} className="flex items-center gap-1 text-xs shrink-0">
+          <span
+            title={token}
+            className="truncate max-w-[100px] font-mono text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-800"
+          >
+            {token}
+          </span>
+          <button
+            className="p-0.5 hover:bg-gray-200 rounded transition-colors shrink-0"
+            title="Copy token"
+            onClick={() => handleCopyToken(token)}
+          >
+            {copiedToken === token ? (
+              <Check className="w-3 h-3 text-green-600" />
+            ) : (
+              <Copy className="w-3 h-3 text-red-500" />
+
+            )}
+          </button>
+
+        </div>
+      ))}
+    </div>
+  );
 };
 
 const ModulesCodeCell = ({
@@ -657,18 +806,57 @@ const PermissionCodeCell = ({
   );
 };
 
-export default function TBOUsersPage() {
+export default function TBOUsersPage({
+  initialRole = "all",
+  pageTitle,
+}: {
+  initialRole?: string;
+  pageTitle?: string;
+} = {}) {
   const modulesCodeMap = useModulesCodeMap();
 
   const [openModal, setOpenModal] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
-  console.log('user ->>> ', users)
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
+  const [, setMessageState] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [roleFilter, setRoleFilter] = useState<string>("all");
+
+  const setMessage = (msg: string) => {
+    if (!msg) {
+      toast.dismiss();
+      setMessageState("");
+      return;
+    }
+
+    setMessageState(msg);
+    toast(msg, {
+      position: "top-right",
+      autoClose: 3000,
+      hideProgressBar: true,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+      theme: "colored",
+      style: {
+        background: "#16a34a",
+        color: "#ffffff",
+        minHeight: "40px",
+        padding: "6px 10px",
+        borderRadius: "6px",
+        fontSize: "16px",
+        fontWeight: 500,
+      },
+    });
+  };
+  const [roleFilter, setRoleFilter] = useState<string>(initialRole);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [usernameFilter, setUsernameFilter] = useState<string>("all");
+  const [currentUserProfile, setCurrentUserProfile] = useState<{
+    username: string;
+    mobileNo: string;
+    role: string;
+  } | null>(null);
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [showUserDetails, setShowUserDetails] = useState(false);
@@ -686,15 +874,17 @@ export default function TBOUsersPage() {
   const [modalSaveMessage, setModalSaveMessage] = useState("");
   const [pagination, setPagination] = useState({
     currentPage: 1,
-    itemsPerPage: 1000,
+    itemsPerPage: 50,
     totalItems: 0,
     totalPages: 0,
   });
 
-  const userSelectedItemsPerPageRef = useRef<number | null>(1000);
+  const profileDefaultsAppliedRef = useRef(false);
+  const userSelectedItemsPerPageRef = useRef<number | null>(50);
   const [parentFilter, setParentFilter] = useState<"all" | number>("all");
   const [editedRows, setEditedRows] = useState<Record<number, any>>({});
   const [dirtyRowIds, setDirtyRowIds] = useState<Set<number>>(new Set());
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
 
   const USER_ROLES: any = [
     { value: "super_admin", label: "Super Admin" },
@@ -779,7 +969,7 @@ export default function TBOUsersPage() {
       const res = await BulkUpdateTboUsers(changedUsers as any[]);
 
       if (res?.success) {
-        setMessage("Changes saved successfully");
+        setMessage("Saved");
         setEditedRows({});
         setDirtyRowIds(new Set());
         await fetchUsers();
@@ -789,6 +979,40 @@ export default function TBOUsersPage() {
     } catch (error) {
       console.error("Save changes error:", error);
       setMessage("Failed to save changes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteUsers = async () => {
+    if (selectedUserIds.size === 0) {
+      setMessage("Please select users to delete");
+      return;
+    }
+
+    const userCount = selectedUserIds.size;
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${userCount} user${userCount > 1 ? 's' : ''}? This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      const userIdsArray = Array.from(selectedUserIds);
+
+      const res = await DeleteTboUsers(userIdsArray);
+
+      if (res?.success) {
+        setMessage(`${userCount} user${userCount > 1 ? 's' : ''} deleted successfully`);
+        setSelectedUserIds(new Set());
+        await fetchUsers();
+      } else {
+        setMessage(res?.message || "Failed to delete users");
+      }
+    } catch (error: any) {
+      console.error("Delete error:", error);
+      setMessage(error?.message || "Failed to delete users");
     } finally {
       setLoading(false);
     }
@@ -821,25 +1045,59 @@ export default function TBOUsersPage() {
           ...prev,
           currentPage: res?.pagination?.currentPage || customPage,
           itemsPerPage: res?.pagination?.itemsPerPage || customLimit,
-          totalItems: res?.pagination?.totalItems || 0,
-          totalPages: res?.pagination?.totalPages || 0,
+          totalItems: res?.pagination?.totalItems || rows.length,
+          totalPages: res?.pagination?.totalPages || 1,
         }));
       } else {
         setUsers([]);
-        setPagination((prev) => ({
-          ...prev,
-          totalItems: 0,
-          totalPages: 0,
-        }));
         setMessage(res?.message || "Failed to fetch users");
       }
     } catch (error) {
       console.error("Error fetching users:", error);
+      setUsers([]);
       setMessage("Failed to fetch users");
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchCurrentUserProfile = async () => {
+      try {
+        const res: any = await getProfile();
+        const profileUser = res?.data?.user || res?.user || res?.data || null;
+
+        if (!isMounted || !profileUser) return;
+
+        const username = String(profileUser.username || profileUser.name || "").trim();
+        const mobileNo = String(profileUser.mobile_no || profileUser.mobile || "").trim();
+        const role = String(profileUser.role || "").trim();
+
+        if (!username) return;
+
+        setCurrentUserProfile({ username, mobileNo, role });
+
+        if (!profileDefaultsAppliedRef.current) {
+          setUsernameFilter(username);
+          if (role && initialRole === "all") {
+            setRoleFilter(role);
+          }
+          setPagination((prev) => ({ ...prev, currentPage: 1 }));
+          profileDefaultsAppliedRef.current = true;
+        }
+      } catch (error) {
+        console.warn("Failed to load current profile for default filters", error);
+      }
+    };
+
+    fetchCurrentUserProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -858,83 +1116,152 @@ export default function TBOUsersPage() {
   ]);
 
 
-  const paginatedUsers = useMemo(() => {
-    const start = (pagination.currentPage - 1) * pagination.itemsPerPage;
-    const end = start + pagination.itemsPerPage;
-    return users.slice(start, end);
-  }, [users, pagination.currentPage, pagination.itemsPerPage]);
+  const paginatedUsers = useMemo(() => users, [users]);
 
-  // Get unique usernames for the filter
-  const uniqueUsernames = useMemo(() => {
-    const usernames = users.map((u) => u.username).filter(Boolean);
-    return Array.from(new Set(usernames)).sort();
+  const uniqueUsersForFilter = useMemo(() => {
+    const userMap = new Map<string, string>();
+
+    users.forEach((u) => {
+      const username = String(u?.username || "").trim();
+      if (!username) return;
+
+      if (!userMap.has(username)) {
+        const mobileNo = String(u?.mobile_no || u?.mobile || "").trim();
+        userMap.set(username, mobileNo);
+      }
+    });
+
+    return Array.from(userMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([username, mobileNo]) => ({ username, mobileNo }));
   }, [users]);
 
+  const parentOptions = useMemo<FilterOption[]>(() => {
+    const parentMap = new Map<string, string>();
+    users
+      .filter((u) => u.role === "leader" || u.role === "coordinator")
+      .forEach((u) => {
+        const id = String(u.id);
+        const displayName = formatUsername(u.username || "");
+        if (!parentMap.has(id)) {
+          parentMap.set(id, displayName || String(u.username || ""));
+        }
+      });
+
+    const mapped = Array.from(parentMap.entries())
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([id, label]) => ({
+        value: id,
+        label,
+        searchText: `${label} ${id}`,
+      }));
+
+    return [{ value: "all", label: "All Parents", searchText: "all parents" }, ...mapped];
+  }, [users]);
+
+  const userOptions = useMemo<FilterOption[]>(() => {
+    const options: FilterOption[] = [
+      {
+        value: "all",
+        label: `All Users (${users.length})`,
+        searchText: `all users ${users.length}`,
+      },
+    ];
+
+    if (
+      currentUserProfile?.username &&
+      !uniqueUsersForFilter.some((u) => u.username === currentUserProfile.username)
+    ) {
+      const displayName = formatUsername(currentUserProfile.username);
+      const label = currentUserProfile.mobileNo
+        ? `${displayName} - ${currentUserProfile.mobileNo}`
+        : displayName;
+      options.push({
+        value: currentUserProfile.username,
+        label,
+        searchText: `${displayName} ${currentUserProfile.mobileNo}`.trim(),
+      });
+    }
+
+    uniqueUsersForFilter.forEach((u) => {
+      const displayName = formatUsername(u.username);
+      const label = u.mobileNo ? `${displayName} - ${u.mobileNo}` : displayName;
+      options.push({
+        value: u.username,
+        label,
+        searchText: `${displayName} ${u.mobileNo}`.trim(),
+      });
+    });
+
+    return options;
+  }, [users.length, uniqueUsersForFilter, currentUserProfile]);
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="flex h-screen flex-col overflow-x-hidden bg-gray-50">
       <TBOUserNavbar />
 
       {/* Filter Bar */}
-      <div className="bg-white border-b text-black border-gray-200 px-5 py-3">
-        <div className="flex items-center justify-between gap-3">
+      <div className="bg-white px-4 text-black">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           {/* Left side filters */}
-          <div className="flex items-center gap-3 flex-1">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
             {/* Role Filter */}
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px]"
-            >
-              <option value="all">All Roles</option>
-              <option value="super_admin">Super Admin</option>
-              <option value="admin">Admin</option>
-              <option value="leader">Leader</option>
-              <option value="coordinator">Coordinator</option>
-              <option value="caller">Tele Caller</option>
-              <option value="data_entry_operator">Data Entry Operator</option>
-              <option value="mobile_user">Mobile User</option>
-              <option value="volunteer">Volunteer</option>
-              <option value="survey">Surveyer</option>
-            </select>
+            {initialRole !== "all" ? (
+              <span className="px-3 py-1.5 text-sm border border-indigo-300 bg-indigo-50 text-indigo-700 font-medium rounded-md">
+                {pageTitle ||
+                  USER_ROLES.find((r: any) => r.value === initialRole)?.label ||
+                  initialRole}
+              </span>
+            ) : (
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px]"
+              >
+                <option value="all">All Roles</option>
+                <option value="super_admin">Super Admin</option>
+                <option value="admin">Admin</option>
+                <option value="leader">Leader</option>
+                <option value="coordinator">Coordinator</option>
+                <option value="caller">Tele Caller</option>
+                <option value="data_entry_operator">Data Entry Operator</option>
+                <option value="mobile_user">Mobile User</option>
+                <option value="volunteer">Volunteer</option>
+                <option value="survey">Surveyer</option>
+              </select>
+            )}
 
             {/* Parent Filter */}
-            <select
-              value={parentFilter === "all" ? "all" : parentFilter}
-              onChange={(e) => {
-                const val = e.target.value;
-                setParentFilter(val === "all" ? "all" : Number(val));
-              }}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px]"
-            >
-              <option value="all">All Parents</option>
-              {users
-                .filter((u) => u.role === "leader" || u.role === "coordinator")
-                .map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.username}
-                  </option>
-                ))}
-            </select>
+            <SearchableFilterSelect
+              id="parentFilter"
+              value={parentFilter === "all" ? "all" : String(parentFilter)}
+              onChange={(val) => setParentFilter(val === "all" ? "all" : Number(val))}
+              options={parentOptions}
+              placeholder="All Parents"
+              disabled={loading}
+              activeDropdown={activeDropdown}
+              onDropdownToggle={setActiveDropdown}
+              className="min-w-[170px]"
+            />
 
             {/* Username Filter */}
-            <select
+            <SearchableFilterSelect
+              id="usernameFilter"
               value={usernameFilter}
-              onChange={(e) => setUsernameFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]"
-            >
-              <option value="all">All Users ({users.length})</option>
-              {uniqueUsernames.map((username) => (
-                <option key={username} value={username}>
-                  {username}
-                </option>
-              ))}
-            </select>
+              onChange={setUsernameFilter}
+              options={userOptions}
+              placeholder="All Users"
+              disabled={loading}
+              activeDropdown={activeDropdown}
+              onDropdownToggle={setActiveDropdown}
+              className="min-w-[220px]"
+            />
 
             {/* Status Filter */}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px]"
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px]"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -949,17 +1276,17 @@ export default function TBOUsersPage() {
                 placeholder="Search by name, m..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
 
           {/* Right side actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
               onClick={() => setOpenModal(true)}
-              className="flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2 cursor-pointer text-sm font-semibold text-white shadow-md transition-all duration-200 hover:bg-violet-700 hover:shadow-lg active:scale-[0.97]"
+              className="flex items-center gap-2 rounded bg-violet-600 px-3 py-1.5 cursor-pointer text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-violet-700 active:scale-[0.97]"
             >
               <UserPlus className="w-4 h-4" />
               Add User
@@ -975,43 +1302,77 @@ export default function TBOUsersPage() {
             <button
               onClick={handleSaveChanges}
               disabled={loading || dirtyRowIds.size === 0}
-              className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+              className="px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 cursor-pointer transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
               Save
             </button>
 
             <button
-              onClick={() => fetchUsers}
-              disabled={loading}
-              className="p-2 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
-              title="Refresh"
+              onClick={() => {
+                setRoleFilter("all");
+                setParentFilter("all");
+                setUsernameFilter("all");
+                setStatusFilter("all");
+                setSearchTerm("");
+                setActiveDropdown(null);
+                setPagination(prev => ({ ...prev, currentPage: 1 }));
+                fetchUsers(1, pagination.itemsPerPage);
+              }}
+              className="px-3 py-1.5 bg-red-600 cursor-pointer text-white text-sm font-medium rounded hover:bg-red-700 transition-colors flex items-center gap-2"
+              title="Reset all filters"
             >
-              <RefreshCw className={`w-5 h-5 text-gray-600 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-5 h-5 ${loading ? "animate-spin" : ""}`} />
+              Reset
             </button>
 
             <button
-              onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-              className="p-2 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-              title="Settings"
+              onClick={handleDeleteUsers}
+              disabled={loading || selectedUserIds.size === 0}
+              className={`px-3 py-2 bg-red-500 text-white text-sm font-medium rounded hover:bg-red-600 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
+              title={`Delete ${selectedUserIds.size} selected user${selectedUserIds.size !== 1 ? 's' : ''}`}
             >
-              <Settings className="w-5 h-5 text-gray-600" />
+              <Trash2 className="w-4 h-4" />
+              Delete ({selectedUserIds.size})
             </button>
 
-            <span className="text-sm font-medium text-gray-700">admin</span>
+            {/* <Link href="/tbo-users/setting">
+              <button
+                className="p-2 bg-gray-100 hover:bg-gray-200 rounded cursor-pointer transition-colors"
+                title="Settings"
+              >
+                <Settings className="w-5 h-5 text-gray-600" />
+              </button>
+            </Link> */}
           </div>
         </div>
       </div>
 
-      {/* Message Display */}
-      {message && (
-        <div className="bg-blue-50 border-l-4 border-blue-400 p-3 mx-5 mt-3">
-          <p className="text-sm text-blue-700">{message}</p>
-        </div>
-      )}
+      <ToastContainer
+        position="top-right"
+        hideProgressBar
+        newestOnTop
+        closeOnClick
+        pauseOnHover
+        draggable
+        toastStyle={{
+          background: "#16a34a",
+          color: "#ffffff",
+          minHeight: "30px",
+          padding: "6px 10px",
+          borderRadius: "6px",
+          fontSize: "12px",
+          fontWeight: 500,
+        }}
+        style={{
+          top: "6px",
+          right: "8px",
+          width: "fit-content",
+        }}
+      />
 
       {/* Table */}
-      <div className="px-5 py-4">
+      <div className="flex-1 min-h-0 min-w-0 overflow-x-auto overflow-y-hidden py-1">
         <TBOUsersHotTable
           data={paginatedUsers}
           loading={loading}
@@ -1057,7 +1418,7 @@ export default function TBOUsersPage() {
                   fullUser?.selectedColumns && typeof fullUser.selectedColumns === "object"
                     ? fullUser.selectedColumns
                     : {},
-                password: "",
+                password: fullUser?.password || "",
               };
 
               setSelectedUser(normalizedUser);
@@ -1110,6 +1471,8 @@ export default function TBOUsersPage() {
             setParentManagementUser(usr);
             setShowParentManagementModal(true);
           }}
+          selectedUserIds={selectedUserIds}
+          onSelectionChange={setSelectedUserIds}
         />
       </div>
 
@@ -1244,44 +1607,60 @@ export default function TBOUsersPage() {
               setLoading(true);
               setMessage("");
 
-              const payload = {
-                username: editedUser.username || "",
-                email: editedUser.email || "",
-                authenticated_email:
-                  editedUser.authenticated_email ||
-                  editedUser.authenticatedEmail ||
-                  "",
-                mobile_no: editedUser.mobile_no || editedUser.mobile || "",
-                role: editedUser.role || "",
-                is_active:
-                  typeof editedUser.is_active === "boolean"
-                    ? editedUser.is_active
-                    : true,
-                permissions: Array.isArray(editedUser.permissions)
-                  ? editedUser.permissions
-                  : [],
-                assignedModules: Array.isArray(editedUser.assignedModules)
-                  ? editedUser.assignedModules
-                  : [],
-                assignedSubModules: Array.isArray(editedUser.assignedSubModules)
-                  ? editedUser.assignedSubModules
-                  : [],
-                assignedDatasets: Array.isArray(editedUser.assignedDatasets)
-                  ? editedUser.assignedDatasets
-                  : [],
-                datasetAccess: Array.isArray(editedUser.datasetAccess)
-                  ? editedUser.datasetAccess
-                  : [],
-                selectedColumns:
-                  editedUser.selectedColumns &&
-                    typeof editedUser.selectedColumns === "object"
-                    ? editedUser.selectedColumns
-                    : {},
-                team_ids: Array.isArray(editedUser.team_ids)
-                  ? editedUser.team_ids
-                  : [],
-                password: editedUser.password || "",
-              };
+              const payload: any = {};
+
+              // Only include fields that have been modified
+              if (dirtyFields.has("username")) {
+                payload.username = editedUser.username || "";
+              }
+              if (dirtyFields.has("email")) {
+                payload.email = editedUser.email || "";
+              }
+              if (dirtyFields.has("authenticated_email")) {
+                payload.authenticated_email = editedUser.authenticated_email || editedUser.authenticatedEmail || "";
+              }
+              if (dirtyFields.has("mobile_no")) {
+                payload.mobile_no = editedUser.mobile_no || editedUser.mobile || "";
+              }
+              if (dirtyFields.has("role")) {
+                payload.role = editedUser.role || "";
+              }
+              if (dirtyFields.has("is_active")) {
+                payload.is_active = typeof editedUser.is_active === "boolean" ? editedUser.is_active : true;
+              }
+              if (dirtyFields.has("assignedModules")) {
+                payload.assignedModules = Array.isArray(editedUser.assignedModules) ? editedUser.assignedModules : [];
+              }
+              if (dirtyFields.has("assignedSubModules")) {
+                payload.assignedSubModules = Array.isArray(editedUser.assignedSubModules) ? editedUser.assignedSubModules : [];
+              }
+              if (dirtyFields.has("assignedDatasets")) {
+                payload.assignedDatasets = Array.isArray(editedUser.assignedDatasets) ? editedUser.assignedDatasets : [];
+              }
+              if (dirtyFields.has("datasetAccess")) {
+                payload.datasetAccess = Array.isArray(editedUser.datasetAccess) ? editedUser.datasetAccess : [];
+              }
+              if (dirtyFields.has("selectedColumns")) {
+                payload.selectedColumns = editedUser.selectedColumns && typeof editedUser.selectedColumns === "object" ? editedUser.selectedColumns : {};
+              }
+              if (dirtyFields.has("team_ids")) {
+                payload.team_ids = Array.isArray(editedUser.team_ids) ? editedUser.team_ids : [];
+              }
+              if (dirtyFields.has("address")) {
+                payload.address = editedUser.address || "";
+              }
+              if (dirtyFields.has("location")) {
+                payload.location = editedUser.location || "";
+              }
+              if (dirtyFields.has("password")) {
+                payload.password = editedUser.password || "";
+              }
+
+              // Check if any fields have been modified
+              if (Object.keys(payload).length === 0) {
+                setMessage("No changes to save");
+                return;
+              }
 
               const res = await UpdateTboUsers(selectedUser.id, payload);
 

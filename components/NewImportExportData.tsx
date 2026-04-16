@@ -1,8 +1,8 @@
 // NewImportExportData.tsx
 "use client";
 
-import React, { useState, useEffect, ChangeEvent } from "react";
-import { Plus, Upload, X, FileText, Trash2, Search } from "lucide-react";
+import React, { useState, useEffect, ChangeEvent, useRef } from "react";
+import { Plus, Upload, X, FileText, Trash2, Search, ShieldOff } from "lucide-react";
 import {
   getDataIdRow,
   updateDataIdRow,
@@ -56,11 +56,15 @@ interface NewImportExportDataProps {
   onSelectedRowsChange?: (selectedDataIds: string[]) => void;
   onBrowseClick?: () => void;
   setImportRowClicked?: (value: boolean) => void;
+  onDeleteDataIds?: (dataIds: string[]) => void;
+  onInactiveDataIds?: (dataIds: string[]) => void;
 }
 
 export default function NewImportExportData({
   onSelectedRowsChange,
   setImportRowClicked,
+  onDeleteDataIds,
+  onInactiveDataIds,
 }: NewImportExportDataProps = {}) {
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
   const [showUploadDialog, setShowUploadDialog] = useState<boolean>(false);
@@ -79,6 +83,7 @@ export default function NewImportExportData({
     date: new Date().toISOString().split("T")[0],
   });
 
+  const hoverHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [acOptions, setAcOptions] = useState<AcOption[]>([]);
   const [selectedAcValue, setSelectedAcValue] = useState<string>("");
   const [dataIdOptions, setDataIdOptions] = useState<DataIdOption[]>([]);
@@ -104,11 +109,25 @@ export default function NewImportExportData({
     );
   });
 
+  const [hoveredRange, setHoveredRange] = useState<{
+    x: number;
+    y: number;
+    ranges: DataRange[];
+  } | null>(null);
+
   const acSelectOptions = acOptions.map((option) => option.ac_list);
 
   const dataIdSelectOptions = dataIdOptions.map(
     (option) => option.data_id || ""
   );
+
+  useEffect(() => {
+    return () => {
+      if (hoverHideTimeoutRef.current) {
+        clearTimeout(hoverHideTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const loadDataEntries = async (): Promise<void> => {
     setLoadingDataEntries(true);
@@ -677,7 +696,7 @@ export default function NewImportExportData({
             <p className="mt-2 text-gray-500">Loading data...</p>
           </div>
         ) : (
-          <div className="overflow-x-auto border border-gray-200 rounded">
+          <div className="overflow-x-auto overflow-y-visible border border-gray-200 rounded relative">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -766,9 +785,41 @@ export default function NewImportExportData({
                         {entry.dataName || "-"}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                        {entry.data_range && entry.data_range.length > 0
-                          ? `${entry.data_range[0].from} - ${entry.data_range[0].to}`
-                          : "-"}
+                        {Array.isArray(entry.data_range) && entry.data_range.length > 0 ? (
+                          <div
+                            className="max-w-[180px] truncate cursor-pointer"
+                            onMouseEnter={(e: any) => {
+                              if (hoverHideTimeoutRef.current) {
+                                clearTimeout(hoverHideTimeoutRef.current);
+                                hoverHideTimeoutRef.current = null;
+                              }
+
+                              if ((entry?.data_range?.length ?? 0) > 1) {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setHoveredRange({
+                                  x: rect.left,
+                                  y: rect.bottom + 8,
+                                  ranges: entry.data_range ?? []
+                                });
+                              }
+                            }}
+                            onMouseLeave={() => {
+                              if (hoverHideTimeoutRef.current) {
+                                clearTimeout(hoverHideTimeoutRef.current);
+                              }
+
+                              hoverHideTimeoutRef.current = setTimeout(() => {
+                                setHoveredRange(null);
+                              }, 160);
+                            }}
+                          >
+                            {entry.data_range
+                              .map((range: any) => `${range.from} - ${range.to}`)
+                              .join(", ")}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                         {entry.date || "-"}
@@ -803,9 +854,81 @@ export default function NewImportExportData({
           </div>
         )}
 
+        {hoveredRange && (
+          <div
+            className="fixed z-[9999]"
+            style={{
+              left: `${Math.min(hoveredRange.x, window.innerWidth - 340)}px`,
+              top: `${hoveredRange.y}px`,
+            }}
+            onMouseEnter={() => {
+              if (hoverHideTimeoutRef.current) {
+                clearTimeout(hoverHideTimeoutRef.current);
+                hoverHideTimeoutRef.current = null;
+              }
+            }}
+            onMouseLeave={() => {
+              if (hoverHideTimeoutRef.current) {
+                clearTimeout(hoverHideTimeoutRef.current);
+              }
+
+              hoverHideTimeoutRef.current = setTimeout(() => {
+                setHoveredRange(null);
+              }, 120);
+            }}
+          >
+            <div className="min-w-[220px] max-w-[320px] max-h-[220px] overflow-y-auto rounded-lg border border-gray-300 bg-white shadow-xl p-3 text-xs text-gray-800">
+              <div className="font-semibold text-gray-900 mb-2">Data Range</div>
+
+              <div className="space-y-1">
+                {hoveredRange.ranges.map((range, idx) => (
+                  <div
+                    key={idx}
+                    className="flex justify-between gap-3 border-b border-gray-100 pb-1"
+                  >
+                    <span className="text-gray-500">Range {idx + 1}</span>
+                    <span className="font-medium text-gray-800">
+                      {range.from} - {range.to}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {selectedRows.size > 0 && (
-          <div className="mt-4 flex justify-end">
-            <button className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors text-sm font-medium border border-red-200">
+          <div className="mt-4 flex gap-1.5 justify-end">
+            <button
+              onClick={() => {
+                if (onInactiveDataIds) {
+                  const selectedDataIds = dataEntries
+                    .filter((e) => selectedRows.has(e.id))
+                    .map((e) => e.dataId)
+                    .filter((id) => id);
+
+                  onInactiveDataIds(selectedDataIds);
+                }
+              }}
+              className="flex items-center gap-2 cursor-pointer px-4 py-2 bg-yellow-50 text-yellow-600 rounded hover:bg-yellow-100 transition-colors text-sm font-medium border border-yellow-200"
+            >
+              <ShieldOff className="w-4 h-4" />
+              Inactive ({selectedRows.size})
+            </button>
+
+            <button
+              onClick={() => {
+                if (onDeleteDataIds) {
+                  const selectedDataIds = dataEntries
+                    .filter((e) => selectedRows.has(e.id))
+                    .map((e) => e.dataId)
+                    .filter((id) => id);
+
+                  onDeleteDataIds(selectedDataIds);
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 cursor-pointer bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors text-sm font-medium border border-red-200"
+            >
               <Trash2 className="w-4 h-4" />
               Delete Selected ({selectedRows.size})
             </button>

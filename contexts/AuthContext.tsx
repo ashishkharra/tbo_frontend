@@ -16,15 +16,13 @@ interface User {
   name?: string;
   email?: string;
   mobile?: string;
+  mobile_no?: string;
+
   role?: string;
-  role_id?: number | string;
-  permissions?: any;
-  module_permissions?: any;
-  permission_code?: any;
-  assignedModules?: string[];
-  assignedSubModules?: string[];
-  assignedDatasets?: string[];
-  modules_code?: any;
+  last_login?: string;
+  email_verified?: boolean;
+  is_active?: boolean;
+
   [key: string]: any;
 }
 
@@ -72,24 +70,32 @@ const normalizeUser = (rawUser: any): User => {
 
   return {
     ...rawUser,
+
+    name: rawUser.username || rawUser.name || "",
+    mobile: rawUser.mobile_no || rawUser.mobile || "",
+    email: rawUser.email || "",
+    role: rawUser.role || "",
+    last_login: rawUser.last_login || null,
+
     assignedModules: normalizeArray(
       rawUser.assignedModules ||
-        rawUser.assigned_modules ||
-        rawUser.modules ||
-        rawUser.module_ids
+      rawUser.assigned_modules ||
+      rawUser.modules ||
+      rawUser.module_ids
     ),
     assignedSubModules: normalizeArray(
       rawUser.assignedSubModules ||
-        rawUser.assigned_sub_modules ||
-        rawUser.subModules ||
-        rawUser.sub_module_ids
+      rawUser.assigned_sub_modules ||
+      rawUser.subModules ||
+      rawUser.sub_module_ids
     ),
     assignedDatasets: normalizeArray(
       rawUser.assignedDatasets ||
-        rawUser.assigned_datasets ||
-        rawUser.datasets ||
-        rawUser.dataset_ids
+      rawUser.assigned_datasets ||
+      rawUser.datasets ||
+      rawUser.dataset_ids
     ),
+
     modules_code: rawUser.modules_code || null,
   };
 };
@@ -132,8 +138,6 @@ export const AuthProvider = ({
       setLoading(true);
 
       const token = getStoredToken();
-
-      console.log('yyyyyyyyy')
 
       if (!token) {
         setUser(null);
